@@ -464,6 +464,7 @@ config SND_SOC_TPA2028D_DUAL_SPEAKER
 config DUAL_SPEAKER
 	bool "Audio subsystem TPA2028D DUAL SPEAKER"
 	default n
+
 # CONFIG_LGE_AUDIO
 config LGE_AUDIO
 	default y
@@ -478,3 +479,9 @@ config SND_SOC_ES325_SLIM
 	default n
 	help
 		Audience es325 Dual Mic Noise Reduction
+
+config SOUND_CONTROL_HAX_GPL
+	tristate "wcd93xx sound control hax"
+	default y
+	help
+	  FauxSound WCD93xx chipset sound control hacks
