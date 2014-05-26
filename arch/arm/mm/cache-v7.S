@@ -263,6 +263,7 @@ ENTRY(v7_coherent_user_range)
 ENDPROC(v7_coherent_kern_range)
 ENDPROC(v7_coherent_user_range)
 
+
 /*
  *	v7_flush_kern_dcache_area(void *addr, size_t size)
  *
