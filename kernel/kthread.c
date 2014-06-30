@@ -609,7 +609,6 @@ retry:
 		insert_kthread_work(worker, &fwork.work, worker->work_list.next);
 	else
 		noop = true;
-
 	spin_unlock_irq(&worker->lock);
 
 	if (!noop)
