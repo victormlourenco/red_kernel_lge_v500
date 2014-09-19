@@ -486,6 +486,11 @@ int subsystem_restart_dev(struct subsys_device *dev)
 		__subsystem_restart_dev(dev);
 		break;
 	case RESET_SOC:
+		/* wcnss SSR (QCT patch for SubSystem Reset 3)*/
+		if (strncmp(name, "wcnss", 5) == 0) {
+			__subsystem_restart_dev(dev);
+			break;
+		}
 #if defined(CONFIG_LGE_CRASH_HANDLER)
 		set_ssr_magic_number(name);
 		ssr_magic_number = get_ssr_magic_number();

@@ -44,4 +44,11 @@ config LGE_CRASH_HANDLER
 	help
 	  LGE Crash Handler
 
+config LGE_DOCK
+	bool "LGE Dock Driver"
+	default n
+	depends on MACH_LGE
+	help
+	  LGE Dock Driver
+
 endmenu

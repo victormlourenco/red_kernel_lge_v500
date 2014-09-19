@@ -4,3 +4,6 @@
 
 # MAKO
 obj-$(CONFIG_MACH_APQ8064_MAKO) += mako/
+
+# PALMAN
+obj-$(CONFIG_MACH_APQ8064_PALMAN) += palman/

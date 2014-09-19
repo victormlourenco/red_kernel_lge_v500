@@ -602,6 +602,12 @@ config TOUCHSENSE_VIBRATOR
 	  This option enables device driver support for Immersion Touchsense
 	  vibrator.
 
+config ANDROID_IRRC
+	bool "Android irrc support"
+	default n
+	help
+	  If you say yes here you get support for IrRC
+
 config PMIC8XXX_NFC
 	tristate "Qualcomm PM8XXX support for Near Field Communication"
 	depends on MFD_PM8XXX

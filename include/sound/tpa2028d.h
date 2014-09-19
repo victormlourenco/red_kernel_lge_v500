@@ -35,7 +35,15 @@ struct amp_cal {
 	u8 data;
 };
 
+#ifdef CONFIG_SND_SOC_TPA2028D_DUAL_SPEAKER
+void set_amp_gain(int amp_no, int num);
+#else
 void set_amp_gain(int num);
+#endif
+
+#ifdef CONFIG_ANDROID_IRRC
+void irrc_amp_off(int amp_no, int num);
+#endif
 
 struct audio_amp_platform_data {
 	int (*enable)(int);

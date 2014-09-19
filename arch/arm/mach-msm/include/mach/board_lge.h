@@ -115,4 +115,4 @@ void __init lge_add_qfprom_devices(void);
 enum lge_boot_mode_type lge_get_boot_mode(void);
 int lge_get_factory_boot(void);
 
-#endif // __ASM_ARCH_MSM_BOARD_LGE_H
+#endif //                           

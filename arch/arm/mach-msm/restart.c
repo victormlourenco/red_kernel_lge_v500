@@ -230,7 +230,7 @@ void set_kernel_crash_magic_number(void)
 	else
 		__raw_writel(restart_mode, restart_reason);
 }
-#endif /* CONFIG_LGE_CRASH_HANDLER */
+#endif /*                          */
 
 void msm_restart(char mode, const char *cmd)
 {
@@ -280,7 +280,7 @@ void msm_restart(char mode, const char *cmd)
 	if (in_panic == 1)
 		set_kernel_crash_magic_number();
 reset:
-#endif /* CONFIG_LGE_CRASH_HANDLER */
+#endif /*                          */
 
 	__raw_writel(0, msm_tmr0_base + WDT0_EN);
 	if (!(machine_is_msm8x60_fusion() || machine_is_msm8x60_fusn_ffa())) {

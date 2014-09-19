@@ -159,6 +159,11 @@ struct pm8921_charger_platform_data {
 	int				rconn_mohm;
 	enum pm8921_chg_led_src_config	led_src_config;
 	int				eoc_check_soc;
+#ifdef CONFIG_PM8921_CHARGER_AICL_SELECTION
+	bool				disable_aicl;
+	unsigned int			*iusbmax_thermal_mitigation;
+	int				iusbmax_thermal_levels;
+#endif
 };
 
 enum pm8921_charger_source {
