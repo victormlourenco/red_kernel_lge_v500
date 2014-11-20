@@ -45,7 +45,7 @@ static inline int cpufreq_unregister_notifier(struct notifier_block *nb,
 						unsigned int list)
 {
 	return 0;
-}
+} 
 static inline void disable_cpufreq(void) { }
 #endif		/* CONFIG_CPU_FREQ */
 
@@ -389,6 +389,9 @@ extern struct cpufreq_governor cpufreq_gov_intelliactive;
 #elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_INTELLIDEMAND)
 extern struct cpufreq_governor cpufreq_gov_intellidemand;
 #define CPUFREQ_DEFAULT_GOVERNOR        (&cpufreq_gov_intellidemand)
+#elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_INTELLIMM)
+extern struct cpufreq_governor cpufreq_gov_intellimm;
+#define CPUFREQ_DEFAULT_GOVERNOR        (&cpufreq_gov_intellimm)
 #endif
 
 
