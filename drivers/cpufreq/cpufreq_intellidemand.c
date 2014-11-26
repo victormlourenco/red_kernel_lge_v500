@@ -1308,7 +1308,7 @@ void set_two_phase_freq_by_cpu ( int cpu_nr, int cpufreq){
 two_phase_freq_array[cpu_nr-1] = cpufreq;
 }
 
-int input_event_boosted(void)
+static int input_event_boosted(void)
 {
 unsigned long flags;
 
