@@ -2707,7 +2707,7 @@ static void mxt_input_press_report(struct mxt_data *data, int i)
 	input_report_abs(data->input_dev, ABS_MT_WIDTH_MAJOR,
 		data->ts_data.curr_data[i].touch_major);
 
-#ifdef CONFIG_TOUCHSCREEN_ATMEL_KNOCK_ON
+#ifdef CONFIG_TOUCHSCREEN_ATMEL_KNOCK_ON//0//TOUCHEVENTFILTER
 	input_report_abs(data->input_dev, ABS_MT_WIDTH_MINOR,
 		data->ts_data.curr_data[i].touch_minor);
 #else
@@ -2718,7 +2718,7 @@ static void mxt_input_press_report(struct mxt_data *data, int i)
 			data->ts_data.curr_data[i].orientation);
 	input_report_abs(data->input_dev, ABS_MT_WIDTH_MINOR,
 			data->ts_data.curr_data[i].touch_minor);
-#endif
+#endif	//TOUCHEVENTFILTER
 }
 
 static void mxt_input_eventfilter_log(struct mxt_data *data, int i)
@@ -2732,10 +2732,10 @@ static void mxt_input_eventfilter_log(struct mxt_data *data, int i)
 			data->ts_data.curr_data[i].y_position,
 			data->ts_data.curr_data[i].pressure,
 			data->ts_data.curr_data[i].touch_major,
-			data->ts_data.curr_data[i].touch_minor, 	 
+			data->ts_data.curr_data[i].touch_minor, 	//added
 			data->ts_data.curr_data[i].orientation
 	);
-#else
+#else	//TOUCHEVENTFILTER
 	dev_dbg(dev, "report_data[%d] : (x %d, y %d, presure %d, touch_major %d, orient %d)\n",
 			i,
 			data->ts_data.curr_data[i].x_position,
@@ -2744,7 +2744,7 @@ static void mxt_input_eventfilter_log(struct mxt_data *data, int i)
 			data->ts_data.curr_data[i].touch_major,
 			data->ts_data.curr_data[i].orientation
 	);
-#endif
+#endif	//TOUCHEVENTFILTER
 }
 
 
@@ -2951,11 +2951,11 @@ static irqreturn_t mxt_process_messages_t44(struct mxt_data *data)
 		} else {
 			if(data->ts_data.curr_data[i].tool == MT_TOOL_PALM && (data->ts_data.prev_data[i].status == FINGER_RELEASED || data->ts_data.prev_data[i].status == FINGER_INACTIVE))
 			{
-				data->ts_data.palm_info[i] = FIRST_PALM;  
+				data->ts_data.palm_info[i] = FIRST_PALM; //Skip the event
 			}
 			else if(data->ts_data.curr_data[i].tool == MT_TOOL_PALM && (data->ts_data.prev_data[i].status == FINGER_PRESSED || data->ts_data.prev_data[i].status == FINGER_MOVED))
 			{
-				data->ts_data.palm_info[i] = PALM_AND_FINGER;  
+				data->ts_data.palm_info[i] = PALM_AND_FINGER; //Send the release instead of palm press
 				mxt_input_release_report(data, i);
 			}
             else
@@ -2977,7 +2977,7 @@ static irqreturn_t mxt_process_messages_t44(struct mxt_data *data)
 		memset(data->ts_data.prev_data, 0, sizeof(data->ts_data.prev_data));
 	}
 	memset(data->ts_data.curr_data, 0, sizeof(data->ts_data.curr_data));
-#endif 
+#endif//CUST_A_TOUCH
 
 end:
 	if (data->update_input) {
@@ -3907,12 +3907,6 @@ static int mxt_configure_objects(struct mxt_data *data)
 	}
 
 #ifdef FIRMUP_ON_PROBE
-
-	error = mxt_soft_reset(data);
-	if (error) {
-		dev_err(&data->client->dev, "Failed to reset IC\n");
-	}
-
 	mxt_update_crc(data, MXT_COMMAND_REPORTALL, 1);
 
 	if (data->config_crc == 0 || data->config_crc != MXT_LATEST_CONFIG_CRC) {
@@ -4289,8 +4283,6 @@ static ssize_t mxt_update_fw_store(struct device *dev,
         error = mxt_rest_init(data);
 		if (error)
 			return error;
-
-		data->enable_reporting = true;
 	}
 
 	return count;
@@ -4892,6 +4884,7 @@ static int mxt_initialize_t9_input_device(struct mxt_data *data)
 	input_set_abs_params(input_dev, ABS_MT_ORIENTATION,
 			     0, 255, 0, 0);
 
+
 	/* For T15 key array */
 	if (data->T15_reportid_min) {
 		data->t15_keystatus = 0;
@@ -5214,15 +5207,9 @@ static struct i2c_driver mxt_driver = {
 	.id_table	= mxt_id,
 };
 
-static void __init mxt_init_async(void *data, async_cookie_t cookie)
-{
-	i2c_add_driver(&mxt_driver);
-}
-
 static int __init mxt_init(void)
 {
-	async_schedule(mxt_init_async, NULL);
-	return 0;
+	return i2c_add_driver(&mxt_driver);
 }
 
 static void __exit mxt_exit(void)
