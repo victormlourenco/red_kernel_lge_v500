@@ -7,7 +7,6 @@
 #include <linux/writeback.h>
 #include <linux/tracepoint.h>
 
-<<<<<<< HEAD
 TRACE_EVENT(add_device_randomness,
 	TP_PROTO(int bytes, unsigned long IP),
 
@@ -27,8 +26,6 @@ TRACE_EVENT(add_device_randomness,
 		__entry->bytes, (void *)__entry->IP)
 );
 
-=======
->>>>>>> 55da151... Linux 3.4.1 -> 3.4.74
 DECLARE_EVENT_CLASS(random__mix_pool_bytes,
 	TP_PROTO(const char *pool_name, int bytes, unsigned long IP),
 
@@ -90,7 +87,6 @@ TRACE_EVENT(credit_entropy_bits,
 		  (void *)__entry->IP)
 );
 
-<<<<<<< HEAD
 TRACE_EVENT(push_to_pool,
 	TP_PROTO(const char *pool_name, int pool_bits, int input_bits),
 
@@ -197,9 +193,6 @@ TRACE_EVENT(xfer_secondary_pool,
 );
 
 DECLARE_EVENT_CLASS(random__get_random_bytes,
-=======
-TRACE_EVENT(get_random_bytes,
->>>>>>> 55da151... Linux 3.4.1 -> 3.4.74
 	TP_PROTO(int nbytes, unsigned long IP),
 
 	TP_ARGS(nbytes, IP),
@@ -217,7 +210,6 @@ TRACE_EVENT(get_random_bytes,
 	TP_printk("nbytes %d caller %pF", __entry->nbytes, (void *)__entry->IP)
 );
 
-<<<<<<< HEAD
 DEFINE_EVENT(random__get_random_bytes, get_random_bytes,
 	TP_PROTO(int nbytes, unsigned long IP),
 
@@ -230,8 +222,6 @@ DEFINE_EVENT(random__get_random_bytes, get_random_bytes_arch,
 	TP_ARGS(nbytes, IP)
 );
 
-=======
->>>>>>> 55da151... Linux 3.4.1 -> 3.4.74
 DECLARE_EVENT_CLASS(random__extract_entropy,
 	TP_PROTO(const char *pool_name, int nbytes, int entropy_count,
 		 unsigned long IP),
@@ -272,7 +262,6 @@ DEFINE_EVENT(random__extract_entropy, extract_entropy_user,
 	TP_ARGS(pool_name, nbytes, entropy_count, IP)
 );
 
-<<<<<<< HEAD
 TRACE_EVENT(random_read,
 	TP_PROTO(int got_bits, int need_bits, int pool_left, int input_left),
 
@@ -319,9 +308,6 @@ TRACE_EVENT(urandom_read,
 		  "input_entropy_left %d", __entry->got_bits,
 		  __entry->pool_left, __entry->input_left)
 );
-=======
-
->>>>>>> 55da151... Linux 3.4.1 -> 3.4.74
 
 #endif /* _TRACE_RANDOM_H */
 
