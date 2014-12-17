@@ -1905,7 +1905,6 @@ static inline void task_set_no_new_privs(struct task_struct *p)
 {
 	set_bit(PFA_NO_NEW_PRIVS, &p->atomic_flags);
 }
->>>>>>> 890c2b9f... sched: move no_new_privs into new atomic flags
 
 /*
  * task->jobctl flags
