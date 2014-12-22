@@ -4,11 +4,11 @@ fi
  
 make ARCH=arm CROSS_COMPILE=/home/victor/arm-cortex_a15-linux-gnueabihf-linaro_4.9.3-2014.12/bin/arm-cortex_a15-linux-gnueabihf- zImage -j6
  
-cp arch/arm/boot/zImage ~/anykernel/
+cp arch/arm/boot/zImage ~/anykernel_aosp/
  
 cd ~/anykernel/
  
-zipfile="RedKernel-rXXX.zip"
+zipfile="RedKernel-rXXX-AOSP.zip"
 echo "making zip file"
 cp zImage zip/kernel/
  
