@@ -145,21 +145,20 @@ extern struct task_group root_task_group;
 
 #define INIT_TASK_COMM "swapper"
 
-<<<<<<< HEAD
 #if defined(CONFIG_CCSECURITY) && !defined(CONFIG_CCSECURITY_USE_EXTERNAL_TASK_SECURITY)
 #define INIT_CCSECURITY          \
 	.ccs_domain_info = NULL, \
 	.ccs_flags = 0,
 #else
 #define INIT_CCSECURITY
-=======
+#endif
+
 #ifdef CONFIG_RT_MUTEXES
 # define INIT_RT_MUTEXES(tsk)						\
 	.pi_waiters = RB_ROOT,						\
 	.pi_waiters_leftmost = NULL,
 #else
 # define INIT_RT_MUTEXES(tsk)
->>>>>>> 081b201... rtmutex: turn the plist into an rb-tree.
 #endif
 
 /*
@@ -230,11 +229,8 @@ extern struct task_group root_task_group;
 	INIT_TRACE_RECURSION						\
 	INIT_TASK_RCU_PREEMPT(tsk)					\
 	INIT_CPUSET_SEQ							\
-<<<<<<< HEAD
 	INIT_CCSECURITY                                                 \
-=======
 	INIT_RT_MUTEXES(tsk)						\
->>>>>>> 081b201... rtmutex: turn the plist into an rb-tree.
 }
 
 
