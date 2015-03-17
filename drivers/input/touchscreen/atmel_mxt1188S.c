@@ -40,6 +40,7 @@
 #include <linux/mfd/pm8xxx/cradle.h>
 #include <linux/sysdev.h>
 #include <mach/board_lge.h>
+#include <linux/slimport.h>
 
 #define DEBUG_ABS	1
 
@@ -249,6 +250,9 @@ extern bool atmel_touch_i2c_suspended;
 
 static bool mxt_regulator_on = false;
 
+static bool selftest_enable;
+static bool selftest_show;
+
 #ifdef CONFIG_HAS_EARLYSUSPEND
 /* Early-suspend level */
 #define MXT_SUSPEND_LEVEL 50
@@ -442,6 +446,7 @@ struct mxt_data {
 	u8 T100_reportid_max;
 	u8 T24_reportid;
 	u8 T25_reportid;
+	u16 T25_address;
 
 	u16 T93_address;
     u8 T93_reportid;
@@ -486,7 +491,6 @@ struct mxt_data {
 #endif
 	bool mxt_knock_on_enable;
 	bool smart_cover_enable;
-	bool self_test_result;
 	bool chargerlogo;
 
 #ifdef CONFIG_TOUCHSCREEN_LGE_LPWG
@@ -496,6 +500,10 @@ struct mxt_data {
 
 	bool wrong_lpwg_code;
 	u8 wrong_lpwg_count;
+
+	bool self_test_result;
+	u8 self_test_status[4];
+	u8 self_test_result_status;
 
 	struct hrtimer multi_tap_timer;
 	struct work_struct	multi_tap_work;
@@ -1089,6 +1097,8 @@ static int change_config(struct mxt_data *data, int cfg_type) {
     }
 #endif
 
+	dev_info(&data->client->dev, "%s CFG TYPE: %d\n", __func__, cfg_type);
+
 	switch (cfg_type)
 	{
 #ifdef CHANGE_CHARGER_CFG
@@ -1236,6 +1246,7 @@ void trigger_usb_state_from_otg(int usb_type)
 {
 #ifdef CHANGE_CHARGER_CFG
 	if (test_data != NULL) {
+		dev_info(&test_data->client->dev, "%s usb_type: %d\n", __func__, usb_type);
 		if (!test_data->suspended) {
 			if (usb_type) {
 				dev_info(&test_data->client->dev, "%s charger connected. Change configuration to charger mode\n", __func__);
@@ -2068,7 +2079,15 @@ static void mxt_proc_t25_message(struct mxt_data *data, u8 *message)
 	struct device *dev = &data->client->dev;
 	u8 status = message[1];
 
+	if (!selftest_enable)
+		return ;
+
 	dev_dbg(dev, "T25 Self Test completed %u\n",status);
+
+	memset(data->self_test_status, 0, sizeof(data->self_test_status));
+
+	if (selftest_show)
+		data->self_test_status[0] = status;
 
 	if ( status == 0xFE ) {
 		dev_info(dev, "[SUCCESS] All tests passed\n");
@@ -2082,11 +2101,22 @@ static void mxt_proc_t25_message(struct mxt_data *data, u8 *message)
 			dev_err(dev, "[FAIL] AVdd or XVdd is not present\n");
 		} else if (status == 0x12) {
 			dev_err(dev, "[FAIL] Pin fault (SEQ_NUM %u, X_PIN %u, Y_PIN %u)\n", message[2], message[3], message[4]);
+			if (selftest_show) {
+				data->self_test_status[1] = message[2];
+				data->self_test_status[2] = message[3];
+				data->self_test_status[3] = message[4];
+			}
 		} else if (status == 0x17) {
 			dev_err(dev, "[FAIL] Signal limit fault (TYPE_NUM %u, TYPE_INSTANCE %u)\n", message[2], message[3]);
+			if (selftest_show) {
+				data->self_test_status[1] = message[2];
+				data->self_test_status[2] = message[3];
+			}
 		} else;
 		data->self_test_result = false;
 	}
+
+	selftest_enable = false;
 	complete(&data->t25_completion);
 }
 
@@ -2267,12 +2297,7 @@ static void mxt_proc_t24_messages(struct mxt_data *data, u8 *message)
 #endif
 			wake_lock_timeout(&touch_wake_lock, msecs_to_jiffies(2000));
 			dev_err(&data->client->dev,"Knock On detected x[%3d] y[%3d] \n", x, y);
-               input_report_key(data->input_dev, KEY_POWER, true);
-               input_sync(data->input_dev);
-               input_report_key(data->input_dev, KEY_POWER, false);
-               input_sync(data->input_dev);
-
-	//		kobject_uevent_env(&lge_touch_sys_device.kobj, KOBJ_CHANGE, knockon_event);
+			kobject_uevent_env(&lge_touch_sys_device.kobj, KOBJ_CHANGE, knockon_event);
 #ifdef CONFIG_TOUCHSCREEN_LGE_LPWG
 		}
 #endif
@@ -2664,6 +2689,14 @@ static void mxt_proc_t57_messages(struct mxt_data *data, u8 *msg) {
 				}
 				dev_dbg(dev, "Case 3_2 count[%d]\n", data->case3_2_detection_count);
 			}
+
+			else if ((data->ts_data.prev_total_num == 1) && (tch_area == 0) && (atch_area > 30)) {
+				if (++data->case3_3_detection_count > 10) {
+					dev_info(dev, "Step 3_3! Calibration!!\n");
+					goto out_must_calibrate;
+				}
+				dev_dbg(dev, "Case 3_3 count[%d]\n", data->case3_1_detection_count);
+			}
 /*
 			else if ((data->ts_data.prev_total_num > 1) && (data->ts_data.prev_total_num < 6) && ((atch_area * data->ts_data.prev_total_num) > tch_area) &&
 				(sum*4 > tch_area) && atch_area > 20) {
@@ -2697,6 +2730,15 @@ static void mxt_proc_t57_messages(struct mxt_data *data, u8 *msg) {
 				data->t57_card_data = true;
 				dev_dbg(dev, "Step 3_11! Card Calibration Count!! t57_card_data = %d\n",data->t57_card_data);
 
+			} else if ((data->ts_data.prev_total_num < 3) && (atch_area > tch_area) && (atch_area > area)
+					&& (atch_area > 100) && (area > 80)) {
+				if (area != prev_area || tch_area != prev_tch || atch_area != prev_atch) {
+					data->case3_12_detection_count++;
+				}
+				if (data->case3_12_detection_count > 20) {
+					dev_info(dev, "Step 3_12! Calibration!!\n");
+					goto out_must_calibrate;
+				}
 			}
 /*
 			else if ((data->ts_data.prev_total_num >= 2)  && (atch_area == 0)
@@ -3421,7 +3463,7 @@ static int mxt_t6_command(struct mxt_data *data, u16 cmd_offset,
 			  u8 value, bool wait)
 {
 	u16 reg;
-	u8 command_register;
+	u8 command_register = 0;
 	int timeout_counter = 0;
 	int ret;
 
@@ -3443,6 +3485,43 @@ static int mxt_t6_command(struct mxt_data *data, u16 cmd_offset,
 
 	if (timeout_counter > 100) {
 		dev_err(&data->client->dev, "Command failed!\n");
+		return -EIO;
+	}
+
+	return 0;
+}
+
+static int mxt_t25_command(struct mxt_data *data, u8 value, bool wait)
+{
+	struct device *dev = &data->client->dev;
+	u16 reg = 0;
+	u8 command_register = 0;
+	int timeout_counter = 0;
+	int ret = 0;
+
+	if (!selftest_enable)
+		return 0;
+
+	reg = data->T25_address + 1 ;
+
+	ret = mxt_write_reg(data->client, reg, value);
+	if (ret) {
+		dev_info(dev,"Write Self Test Command fail!\n");
+		return ret;
+	}
+
+	if (!wait)
+		return 0;
+
+	do {
+		msleep(20);
+		ret = __mxt_read_reg(data->client, reg, 1, &command_register);
+		if (ret)
+			return ret;
+	} while ((command_register != 0) && (timeout_counter++ <= 100));
+
+	if (timeout_counter > 100) {
+		dev_info(dev,"%s Command failed!\n", __func__);
 		return -EIO;
 	}
 
@@ -3679,6 +3758,7 @@ static void mxt_free_object_table(struct mxt_data *data)
 	data->T100_reportid_max = 0;
 	data->T24_reportid = 0;
 	data->T25_reportid = 0;
+	data->T25_address = 0;
 	data->T93_address = 0;
     data->T93_reportid = 0;
 	data->max_reportid = 0;
@@ -3780,6 +3860,7 @@ static int mxt_parse_object_table(struct mxt_data *data)
 			break;
 		case MXT_SPT_SELFTEST_T25:
 			data->T25_reportid = min_id;
+			data->T25_address = object->start_address;
 			break;
 #ifdef CONFIG_TOUCHSCREEN_LGE_LPWG
 		case MXT_PROCI_TOUCH_SEQUENCE_LOGGER_T93:
@@ -5051,16 +5132,22 @@ static void lpwg_early_suspend(struct mxt_data *data)
 {
 	dev_info(&data->client->dev,"%s Start\n", __func__);
 
-	mxt_reset_slots(data);
+//	mxt_reset_slots(data);
 
 	switch (data->lpwg_mode) {
 		case LPWG_DOUBLE_TAP:
 			data->mxt_knock_on_enable= true;
 			data->mxt_multi_tap_enable = false;
+			if (slimport_is_connected())
+				change_config(data, LGE_CFG_TYPE_SUS_CHARGER);
 			break;
 		case LPWG_MULTI_TAP:
 			data->mxt_knock_on_enable= false;
 			data->mxt_multi_tap_enable = true;
+			if (slimport_is_connected()) {
+				data->suspended = true;
+				change_config(data, LGE_CFG_TYPE_UDF_SUS_CHARGER);
+			}
 			break;
 		default:
 			break;
@@ -5071,6 +5158,21 @@ static void lpwg_early_suspend(struct mxt_data *data)
 static void lpwg_late_resume(struct mxt_data *data)
 {
 	dev_info(&data->client->dev,"%s Start\n", __func__);
+
+	switch (data->lpwg_mode) {
+		case LPWG_DOUBLE_TAP:
+			if (slimport_is_connected())
+				change_config(data, LGE_CFG_TYPE_ACT);
+			break;
+		case LPWG_MULTI_TAP:
+			if (slimport_is_connected()) {
+				data->suspended = false;
+				change_config(data, LGE_CFG_TYPE_UDF_ACT);
+			}
+			break;
+		default:
+			break;
+	}
 
 	memset(g_tci_press, 0, sizeof(g_tci_press));
 	memset(g_tci_report, 0, sizeof(g_tci_report));
@@ -5289,31 +5391,6 @@ static ssize_t mxt_smart_cover_store(struct mxt_data *data,
 
 }
 
-static ssize_t mxt_show_self_test(struct mxt_data *data, char *buf)
-{
-	struct mxt_object *object = NULL;
-
-	int ret = 0;
-	int test_cmd = 254; // TEST ALL
-
-	object = mxt_get_object(data, MXT_SPT_SELFTEST_T25);
-	if (!object)
-		return -EINVAL;
-
-	ret = mxt_write_reg(data->client, object->start_address+1, test_cmd);
-	if(ret)
-		return 0;
-
-	ret = mxt_wait_for_completion(data, &data->t25_completion, MXT_SELFTEST_TIME);
-	if(ret)
-		ret = sprintf(buf, "ATMEL %s Self Test cannot be run\n", MXT_DEVICE_NAME);
-	else
-		ret = sprintf(buf, "ATMEL %s Self Test Result: %s\n",
-			MXT_DEVICE_NAME,(data->self_test_result > 0) ? "Pass\n" : "Fail\n");
-
-	return ret;
-}
-
 static ssize_t mxt_chargerlogo_state_store(struct mxt_data *data,
 	const char *buf, size_t count)
 {
@@ -5333,7 +5410,106 @@ static ssize_t mxt_chargerlogo_state_store(struct mxt_data *data,
 	}
 }
 
-static LGE_TOUCH_ATTR(fw_ver, S_IRUGO, mxt_fw_version_show, NULL);
+static ssize_t show_pen_support(struct mxt_data *data, char *buf)
+{
+	int ret = 0;
+	int pen_support = 1;   /* 1: Support , 0: Not support */
+
+	ret = sprintf(buf, "%d\n", pen_support);
+
+	return ret;
+}
+
+/* Configuration Checksum */
+static ssize_t mxt_info_show(struct mxt_data *data, char *buf)
+{
+	int ret = 0;
+	ret = sprintf(buf, "\n====== Touch IC Info ======\n");
+	ret += sprintf(buf+ret, "FW version           = %u.%u.%02X\n",
+		data->info->version >> 4, data->info->version & 0xf,
+		data->info->build);
+	ret += sprintf(buf+ret, "config checksum      = 0x%06X\n", data->config_crc);
+	ret += sprintf(buf+ret, "Object Num           = %d\n", data->info->object_num);
+	ret += sprintf(buf+ret, "Faily Id             = %d\n", data->info->family_id);
+	ret += sprintf(buf+ret, "Variant              = %d\n", data->info->variant_id);
+	ret += sprintf(buf+ret, "Version              = %d\n", data->info->version);
+	ret += sprintf(buf+ret, "Build                = %d\n", data->info->build);
+
+	return ret;
+}
+
+static ssize_t mxt_selftest(struct mxt_data *data, char *buf, int len)
+{
+	int ret = len;
+	int test_all_cmd = 0xFE;
+
+	selftest_enable = true;
+	selftest_show = true;
+
+	mxt_t25_command(data, test_all_cmd, false);
+	msleep(MXT_SELFTEST_TIME);
+
+	if (data->self_test_status[0] == 0) {
+		ret += snprintf(buf + ret, PAGE_SIZE - ret,  "Need more time. Try Again.\n");
+		return ret;
+	}
+
+	if (data->self_test_status[0] == 0xFD) {
+		ret += snprintf(buf + ret, PAGE_SIZE - ret, "Invalid Test Code. Try Again.");
+	} else if (data->self_test_status[0] == 0xFC) {
+		ret += snprintf(buf + ret, PAGE_SIZE - ret, "The test could not be completed due to an unrelated fault. Try again.");
+	} else {
+		ret += snprintf(buf + ret, PAGE_SIZE - ret, "All Test Result: %s", (data->self_test_status[0] == 0xFE) ? "Pass\n" : "Fail\n");
+		ret += snprintf(buf + ret, PAGE_SIZE - ret, "AVdd power Test Result: %s", (data->self_test_status[0] != 0x01) ? "Pass\n" : "Fail\n");
+
+		ret += snprintf(buf + ret, PAGE_SIZE - ret, "Pin Falut Test Result: %s", (data->self_test_status[0] != 0x12) ? "Pass\n" : "Fail\n");
+		if (data->self_test_status[0] == 0x12)
+			ret += snprintf(buf+ret, PAGE_SIZE - ret, "# Fail # seq_num(%u) x_pin(%u) y_pin(%u)\n",
+										data->self_test_status[1], data->self_test_status[2], data->self_test_status[3]);
+
+		ret += snprintf(buf + ret, PAGE_SIZE - ret, "Signal Limit Test: %s", (data->self_test_status[0] != 0x17) ? "Pass\n" : "Fail\n");
+		if (data->self_test_status[0] == 0x17)
+			ret += snprintf(buf+ret, PAGE_SIZE - ret, "# Fail # type_num(%u) type_instance(%u)\n", data->self_test_status[1], data->self_test_status[2]);
+	}
+
+	selftest_show = false;
+	return ret;
+}
+
+static ssize_t mxt_run_self_diagnostic_show(struct mxt_data *data, char *buf)
+{
+	int info_len = 0;
+	bool chstatus_result = 1;
+	bool rawdata_result = 1;
+
+	msleep(30);
+
+	info_len += mxt_info_show(data, buf);
+	info_len += snprintf(buf + info_len, PAGE_SIZE - info_len, "=======RESULT========\n");
+	info_len = mxt_selftest(data, buf, info_len);
+
+	msleep(30);
+
+	if ((data->self_test_status[0] == 0x01) || (data->self_test_status[0] == 0x12))
+		chstatus_result = 0;
+
+	if (data->self_test_status[0] == 0x17)
+		rawdata_result = 0;
+	if (data->self_test_status[0] == 0) {
+		info_len += snprintf(buf + info_len, PAGE_SIZE - info_len, "Need more time. Try Again.\n");
+	} else if (data->self_test_status[0] == 0xFD) {
+		info_len += snprintf(buf + info_len, PAGE_SIZE - info_len, "Invalid Test Code. Try Again.\n");
+	} else if (data->self_test_status[0] == 0xFC) {
+		info_len += snprintf(buf + info_len, PAGE_SIZE - info_len, "The test could not be completed. Try Again.\n");
+	} else {
+		info_len += snprintf(buf + info_len, PAGE_SIZE - info_len, "Channel Status : %s\n", chstatus_result == 1 ? "PASS" : "FAIL");
+		info_len += snprintf(buf + info_len, PAGE_SIZE - info_len, "Raw Data : %s\n", rawdata_result == 1 ? "PASS" : "FAIL");
+	}
+
+	return info_len;
+}
+
+static LGE_TOUCH_ATTR(testmode_ver, S_IRUGO, mxt_fw_version_show, NULL);
 static LGE_TOUCH_ATTR(hw_version, S_IRUGO, mxt_hw_version_show, NULL);
 static LGE_TOUCH_ATTR(object, S_IRUGO, mxt_object_show, NULL);
 static LGE_TOUCH_ATTR(update_fw, S_IWUSR, NULL, mxt_update_fw_store);
@@ -5343,19 +5519,20 @@ static LGE_TOUCH_ATTR(debug_enable, S_IWUSR | S_IRUSR, mxt_debug_enable_show,
 static LGE_TOUCH_ATTR(change_cfg, S_IWUSR, NULL, mxt_change_cfg_store);
 static LGE_TOUCH_ATTR(object_num, S_IRUGO | S_IWUSR, mxt_object_num_show, mxt_object_num_store);
 static LGE_TOUCH_ATTR(quick_cover_status, S_IRUGO | S_IWUSR, mxt_smart_cover_show, mxt_smart_cover_store);
-static LGE_TOUCH_ATTR(self_test,S_IRUGO | S_IWUSR, mxt_show_self_test, NULL);
 static LGE_TOUCH_ATTR(chargerlogo,S_IRUGO | S_IWUSR, NULL, mxt_chargerlogo_state_store);
 static LGE_TOUCH_ATTR(knock_on_type, S_IRUGO, mxt_get_knockon_type, NULL);
 #if defined(CONFIG_TOUCHSCREEN_LGE_LPWG)
 static LGE_TOUCH_ATTR(lpwg_data, S_IRUGO | S_IWUSR, show_lpwg_data, store_lpwg_data);
 static LGE_TOUCH_ATTR(lpwg_notify, S_IRUGO | S_IWUSR, NULL, store_lpwg_notify);
 #else
-//static LGE_TOUCH_ATTR(touch_gesture,S_IRUGO | S_IWUSR, NULL, mxt_knock_on_store);
-static LGE_TOUCH_ATTR(knock_on,S_IRUGO | S_IWUSR, NULL, mxt_knock_on_store);
+static LGE_TOUCH_ATTR(touch_gesture,S_IRUGO | S_IWUSR, NULL, mxt_knock_on_store);
 #endif
+static LGE_TOUCH_ATTR(pen_support, S_IRUGO | S_IWUSR, show_pen_support, NULL);
+static LGE_TOUCH_ATTR(firmware, S_IRUGO, mxt_info_show, NULL);
+static LGE_TOUCH_ATTR(f54, S_IRUGO, mxt_run_self_diagnostic_show, NULL);
 
 static struct attribute *mxt_attrs[] = {
-	&lge_touch_attr_fw_ver.attr,
+	&lge_touch_attr_testmode_ver.attr,
 	&lge_touch_attr_hw_version.attr,
 	&lge_touch_attr_object.attr,
 	&lge_touch_attr_update_fw.attr,
@@ -5364,21 +5541,23 @@ static struct attribute *mxt_attrs[] = {
 	&lge_touch_attr_change_cfg.attr,
 	&lge_touch_attr_object_num.attr,
 	&lge_touch_attr_quick_cover_status.attr,
-	&lge_touch_attr_self_test.attr,
 	&lge_touch_attr_chargerlogo.attr,
 	&lge_touch_attr_knock_on_type.attr,
 #if defined(CONFIG_TOUCHSCREEN_LGE_LPWG)
 	&lge_touch_attr_lpwg_data.attr,
 	&lge_touch_attr_lpwg_notify.attr,
 #else
-	&lge_touch_attr_knock_on.attr,
+	&lge_touch_attr_touch_gesture.attr,
 #endif
+	&lge_touch_attr_pen_support.attr,
+	&lge_touch_attr_firmware.attr,
+	&lge_touch_attr_f54.attr,
 	NULL
 };
 
-/* lge_touch_attr_show / lge_touch_attr_store
- *
- * sysfs bindings for lge_touch
+/*                                           
+  
+                               
  */
 static ssize_t lge_touch_attr_show(struct kobject *lge_touch_kobj, struct attribute *attr,
 			     char *buf)
@@ -5446,6 +5625,9 @@ static void mxt_reset_slots(struct mxt_data *data)
 static void mxt_start(struct mxt_data *data)
 {
 	struct mxt_object *object = NULL;
+
+	if (slimport_is_connected())
+		data->suspended = true;
 
 	if(data->chargerlogo) {
 		return;
@@ -5520,6 +5702,9 @@ static void mxt_stop(struct mxt_data *data)
 {
 	int knock_charger = 0;
 
+	if (slimport_is_connected())
+		data->suspended = false;
+
 	if (data->suspended || data->in_bootloader)
 		return;
 
@@ -5541,15 +5726,23 @@ static void mxt_stop(struct mxt_data *data)
 
 #ifdef CONFIG_TOUCHSCREEN_LGE_LPWG
 		if (data->lpwg_mode == LPWG_DOUBLE_TAP) {
-			if (data->charger_state == CHARGER_STATE_CONNECTED)
+			if (data->charger_state == CHARGER_STATE_CONNECTED) {
 				knock_charger = LGE_CFG_TYPE_SUS_CHARGER;
-			else
-				knock_charger = LGE_CFG_TYPE_SUS;
+			} else {
+				if (slimport_is_connected())
+					knock_charger = LGE_CFG_TYPE_SUS_CHARGER;
+				else
+					knock_charger = LGE_CFG_TYPE_SUS;
+			}
 		} else if (data->lpwg_mode == LPWG_MULTI_TAP) {
-			if (data->charger_state == CHARGER_STATE_CONNECTED)
+			if (data->charger_state == CHARGER_STATE_CONNECTED) {
 				knock_charger = LGE_CFG_TYPE_UDF_SUS_CHARGER;
-			else
-				knock_charger = LGE_CFG_TYPE_UDF_SUS;
+			} else {
+				if (slimport_is_connected())
+					knock_charger = LGE_CFG_TYPE_UDF_SUS_CHARGER;
+				else
+					knock_charger = LGE_CFG_TYPE_UDF_SUS;
+			}
 		}
 #else
 		if (data->charger_state == CHARGER_STATE_CONNECTED)
@@ -5610,6 +5803,8 @@ static int mxt_input_open(struct input_dev *dev)
 	msleep(100);
 	mxt_regulator_enable(data,1);
 
+	data->suspended = true;
+
 	mxt_start(data);
 
 	return 0;
@@ -5618,7 +5813,6 @@ static int mxt_input_open(struct input_dev *dev)
 static void mxt_input_close(struct input_dev *dev)
 {
 	struct mxt_data *data = input_get_drvdata(dev);
-
 	mxt_stop(data);
 }
 
@@ -5668,7 +5862,7 @@ static int mxt_initialize_t9_input_device(struct mxt_data *data)
 		return -ENOMEM;
 	}
 
-	input_dev->name = MXT_DEVICE_NAME;
+	input_dev->name = "touch_atmel";
 //	input_dev->phys = data->phys;
 //	input_dev->id.bustype = BUS_I2C;
 //	input_dev->dev.parent = dev;
@@ -5768,7 +5962,7 @@ static int __devinit mxt_probe(struct i2c_client *client,
 	struct mxt_data *data;
 	int error;
 #ifdef CUST_A_TOUCH
-	int one_sec = 100; //from lge_touch_core
+	int one_sec = 100; //                   
 	touch_thermal_mode = 0;
 #endif
 	is_probing = true;
@@ -5788,6 +5982,7 @@ static int __devinit mxt_probe(struct i2c_client *client,
 	data->client = client;
 	data->irq = client->irq;
 	i2c_set_clientdata(client, data);
+//	data->suspended = true;
 
 	error = mxt_handle_pdata(data);
 	if (error)
@@ -5887,7 +6082,7 @@ static int __devinit mxt_probe(struct i2c_client *client,
 	/* disabled report touch event to prevent unnecessary event.
 	* it will be enabled in open function
 	*/
-	mxt_stop(data);
+//	mxt_stop(data);
 
 	/* Register sysfs for making fixed communication path to framework layer */
 	error = sysdev_class_register(&lge_touch_sys_class);
@@ -5903,8 +6098,7 @@ static int __devinit mxt_probe(struct i2c_client *client,
 	}
 
 	error = kobject_init_and_add(&data->lge_touch_kobj, &lge_touch_kobj_type,
-			data->input_dev->dev.kobj.parent,
-			"%s", LGE_TOUCH_NAME);
+			data->input_dev->dev.kobj.parent, "%s", LGE_TOUCH_NAME);
 	if (error < 0) {
 		dev_err(&client->dev, "kobject_init_and_add is failed\n");
 		goto err_lge_touch_sysfs_init_and_add;
@@ -5912,15 +6106,13 @@ static int __devinit mxt_probe(struct i2c_client *client,
 
 	sysfs_bin_attr_init(&data->mem_access_attr);
 	data->mem_access_attr.attr.name = "mem_access";
-	data->mem_access_attr.attr.mode = S_IRUGO | S_IWUSR;//S_IRWXUGO;
+	data->mem_access_attr.attr.mode = S_IWUSR | S_IRUSR;
 	data->mem_access_attr.read = mxt_mem_access_read;
 	data->mem_access_attr.write = mxt_mem_access_write;
 	data->mem_access_attr.size = data->mem_size;
 
-	if (sysfs_create_bin_file(&client->dev.kobj,
-				  &data->mem_access_attr) < 0) {
-		dev_err(&client->dev, "Failed to create %s\n",
-			data->mem_access_attr.attr.name);
+	if (sysfs_create_bin_file(&client->dev.kobj, &data->mem_access_attr) < 0) {
+		dev_err(&client->dev, "Failed to create %s\n", data->mem_access_attr.attr.name);
 		goto err_lge_touch_sysfs_init_and_add;
 	}
 
@@ -6053,6 +6245,8 @@ static void mxt_early_suspend(struct early_suspend *h)
 	struct mxt_data *data = container_of(h, struct mxt_data, early_suspend);
 	struct input_dev *input_dev = data->input_dev;
 
+	dev_info(&data->client->dev, "%s\n", __func__);
+
 	if(data->chargerlogo)
 		return ;
 
@@ -6090,6 +6284,8 @@ static void mxt_late_resume(struct early_suspend *h)
 
 	struct mxt_data *data = container_of(h, struct mxt_data, early_suspend);
 	struct input_dev *input_dev = data->input_dev;
+
+	dev_info(&data->client->dev, "%s\n", __func__);
 
 #ifdef CONFIG_TOUCHSCREEN_LGE_LPWG
 //	if (device_may_wakeup(dev) && data->lpwg_mode && suspended_due_to_smart_cover == false) {
@@ -6140,16 +6336,20 @@ static int mxt_suspend(struct device *dev) {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct mxt_data *data = i2c_get_clientdata(client);
 
-if(!data->suspended_2nd) return 0;
+	dev_info(dev, "%s %d  %d  %d\n", __func__,data->suspended_2nd,data->lpwg_mode,mxt_regulator_on);
 
-	dev_info(dev, "%s\n", __func__);
+	if(data->suspended_2nd) return 0;
+
 #ifdef CONFIG_TOUCHSCREEN_LGE_LPWG
 	if (!data->lpwg_mode && mxt_regulator_on) {
 #else
 	if (!data->mxt_knock_on_enable && mxt_regulator_on) {
 #endif
+		touch_disable_irq_wake(data->irq);
+		touch_disable_irq(data->irq);
 		mxt_regulator_enable(data,0);
 	}
+
 	data->suspended_2nd = true;
 	return 0;
 }
@@ -6190,10 +6390,6 @@ static void mxt_shutdown(struct i2c_client *client)
 }
 
 static const struct i2c_device_id mxt_id[] = {
-	{ "qt602240_ts", 0 },
-	{ "atmel_mxt_ts", 0 },
-	{ "atmel_mxt_tp", 0 },
-	{ "mXT224", 0 },
 	{ MXT_DEVICE_NAME, 0},
 	{ }
 };
@@ -6201,7 +6397,7 @@ MODULE_DEVICE_TABLE(i2c, mxt_id);
 
 static struct i2c_driver mxt_driver = {
 	.driver = {
-		.name	= MXT_DEVICE_NAME,
+		.name	= "touch_atmel",
 		.owner	= THIS_MODULE,
 		.pm	= &mxt_pm_ops,
 	},
@@ -6211,8 +6407,18 @@ static struct i2c_driver mxt_driver = {
 	.id_table	= mxt_id,
 };
 
+
+#ifdef CONFIG_LGE_PM_CHARGING_CHARGERLOGO
+extern int lge_boot_mode_for_touch;
+#endif
+
 static int __init mxt_init(void)
 {
+#ifdef CONFIG_LGE_PM_CHARGING_CHARGERLOGO
+	if (lge_boot_mode_for_touch == 2) { // Chargerlogo mode
+		return -EMLINK;
+	}
+#endif
 
 #if defined(CONFIG_TOUCHSCREEN_LGE_LPWG)
 	touch_multi_tap_wq = create_singlethread_workqueue("touch_multi_tap_wq");
@@ -6226,6 +6432,12 @@ static int __init mxt_init(void)
 
 static void __exit mxt_exit(void)
 {
+#ifdef CONFIG_LGE_PM_CHARGING_CHARGERLOGO
+	if (lge_boot_mode_for_touch == 2) { // Chargerlogo mode
+		return;
+	}
+#endif
+
 	i2c_del_driver(&mxt_driver);
 
 #if defined(CONFIG_TOUCHSCREEN_LGE_LPWG)
