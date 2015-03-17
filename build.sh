@@ -6,7 +6,7 @@ make ARCH=arm CROSS_COMPILE=/home/victor/arm-cortex_a15-linux-gnueabihf-linaro_4
  
 cp arch/arm/boot/zImage ~/anykernel-aosp/
  
-cd ~/anykernel/
+cd ~/anykernel-aosp/
  
 zipfile="RedKernel-rXXX-AOSP.zip"
 echo "making zip file"
