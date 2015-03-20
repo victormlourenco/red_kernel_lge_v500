@@ -30,6 +30,11 @@ void cpu_maps_update_begin(void)
 	mutex_lock(&cpu_add_remove_lock);
 }
 
+int cpu_maps_is_updating(void)
+{
+	return mutex_is_locked(&cpu_add_remove_lock);
+}
+
 void cpu_maps_update_done(void)
 {
 	mutex_unlock(&cpu_add_remove_lock);
@@ -440,9 +445,35 @@ void __weak arch_enable_nonboot_cpus_end(void)
 {
 }
 
+#if defined (CONFIG_MACH_APQ8064_OMEGA) || defined (CONFIG_MACH_APQ8064_OMEGAR)
+#define BOOST_FREQ_TIME_MS 2000
+static struct timer_list boost_freq_timer;
+int boost_freq = 0;
+static void boost_freq_timer_cb(unsigned long data)
+{
+	printk(KERN_ERR "clearing boost %d->0 ...\n", boost_freq);
+	boost_freq = 0;
+}
+#endif
+
 void __ref enable_nonboot_cpus(void)
 {
 	int cpu, error;
+#if defined (CONFIG_MACH_APQ8064_OMEGA) || defined (CONFIG_MACH_APQ8064_OMEGAR)
+	static int first = 0;
+
+	if (!first) {
+		init_timer(&boost_freq_timer);
+		first = 1;
+	}
+	if (timer_pending(&boost_freq_timer))
+		del_timer(&boost_freq_timer);
+	boost_freq_timer.function = boost_freq_timer_cb;
+	boost_freq_timer.expires =
+		jiffies + msecs_to_jiffies(BOOST_FREQ_TIME_MS);
+	add_timer(&boost_freq_timer);
+	boost_freq = 1;
+#endif
 
 	/* Allow everyone to use the CPU hotplug again */
 	cpu_maps_update_begin();

@@ -128,7 +128,14 @@ enum {
 };
 
 #define QUP_MAX_CLK_STATE_RETRIES	300
+#define DEFAULT_CLK_RATE		(19200000)
+#define I2C_STATUS_CLK_STATE		13
+#define QUP_OUT_FIFO_NOT_EMPTY		0x10
 
+//                                                   
+#if defined(CONFIG_MACH_APQ8064_AWIFI) || defined(CONFIG_MACH_APQ8064_ALTEV)
+bool atmel_touch_i2c_suspended = false;        /* Use atme touch IC for checking i2c suspend */
+#endif
 static char const * const i2c_rsrcs[] = {"i2c_clk", "i2c_sda"};
 
 static struct gpiomux_setting recovery_config = {
@@ -191,13 +198,17 @@ static irqreturn_t
 qup_i2c_interrupt(int irq, void *devid)
 {
 	struct qup_i2c_dev *dev = devid;
-	uint32_t status = readl_relaxed(dev->base + QUP_I2C_STATUS);
-	uint32_t status1 = readl_relaxed(dev->base + QUP_ERROR_FLAGS);
-	uint32_t op_flgs = readl_relaxed(dev->base + QUP_OPERATIONAL);
+	uint32_t status = 0;
+	uint32_t status1 = 0;
+	uint32_t op_flgs = 0;
 	int err = 0;
 
 	if (pm_runtime_suspended(dev->dev))
 		return IRQ_NONE;
+
+	status = readl_relaxed(dev->base + QUP_I2C_STATUS);
+	status1 = readl_relaxed(dev->base + QUP_ERROR_FLAGS);
+	op_flgs = readl_relaxed(dev->base + QUP_OPERATIONAL);
 
 	if (!dev->msg || !dev->complete) {
 		/* Clear Error interrupt if it's a level triggered interrupt*/
@@ -375,6 +386,7 @@ qup_i2c_poll_writeready(struct qup_i2c_dev *dev, int rem)
 static int qup_i2c_poll_clock_ready(struct qup_i2c_dev *dev)
 {
 	uint32_t retries = 0;
+	uint32_t op_flgs = -1, clk_state = -1;
 
 	/*
 	 * Wait for the clock state to transition to either IDLE or FORCED
@@ -383,16 +395,32 @@ static int qup_i2c_poll_clock_ready(struct qup_i2c_dev *dev)
 
 	while (retries++ < QUP_MAX_CLK_STATE_RETRIES) {
 		uint32_t status = readl_relaxed(dev->base + QUP_I2C_STATUS);
-		uint32_t clk_state = (status >> 13) & 0x7;
+		clk_state = (status >> I2C_STATUS_CLK_STATE) & 0x7;
+		/* Read the operational register */
+		op_flgs = readl_relaxed(dev->base +
+			QUP_OPERATIONAL) & QUP_OUT_FIFO_NOT_EMPTY;
 
-		if (clk_state == I2C_CLK_RESET_BUSIDLE_STATE ||
-				clk_state == I2C_CLK_FORCED_LOW_STATE)
+		/*
+		 * In very corner case when slave do clock stretching and
+		 * output fifo will have 1 block of data space empty at
+		 * the same time.  So i2c qup will get output service
+		 * interrupt and as it doesn't have more data to be written.
+		 * This can lead to issue where output fifo is not empty.
+		*/
+		if (op_flgs == 0 &&
+			(clk_state == I2C_CLK_RESET_BUSIDLE_STATE ||
+			clk_state == I2C_CLK_FORCED_LOW_STATE)){
+			dev_dbg(dev->dev, "clk_state 0x%x op_flgs [%x]\n",
+				clk_state, op_flgs);
 			return 0;
+		}
+
 		/* 1-bit delay before we check again */
 		udelay(dev->one_bit_t);
 	}
 
-	dev_err(dev->dev, "Error waiting for clk ready\n");
+	dev_err(dev->dev, "Error waiting for clk ready clk_state: 0x%x op_flgs: 0x%x\n",
+		clk_state, op_flgs);
 	return -ETIMEDOUT;
 }
 
@@ -670,7 +698,7 @@ static void qup_i2c_recover_bus_busy(struct qup_i2c_dev *dev)
 	int gpio_dat;
 	bool gpio_clk_status = false;
 	uint32_t status = readl_relaxed(dev->base + QUP_I2C_STATUS);
-	struct gpiomux_setting old_gpio_setting;
+	struct gpiomux_setting old_gpio_setting[ARRAY_SIZE(i2c_rsrcs)];
 
 	if (dev->pdata->msm_i2c_config_gpio)
 		return;
@@ -690,7 +718,7 @@ static void qup_i2c_recover_bus_busy(struct qup_i2c_dev *dev)
 	disable_irq(dev->err_irq);
 	for (i = 0; i < ARRAY_SIZE(i2c_rsrcs); ++i) {
 		if (msm_gpiomux_write(dev->i2c_gpios[i], GPIOMUX_ACTIVE,
-				&recovery_config, &old_gpio_setting)) {
+				&recovery_config, &old_gpio_setting[i])) {
 			dev_err(dev->dev, "GPIO pins have no active setting\n");
 			goto recovery_end;
 		}
@@ -720,7 +748,7 @@ static void qup_i2c_recover_bus_busy(struct qup_i2c_dev *dev)
 	/* Configure ALT funciton to QUP I2C*/
 	for (i = 0; i < ARRAY_SIZE(i2c_rsrcs); ++i) {
 		msm_gpiomux_write(dev->i2c_gpios[i], GPIOMUX_ACTIVE,
-				&old_gpio_setting, NULL);
+				&old_gpio_setting[i], NULL);
 	}
 
 	udelay(10);
@@ -1449,6 +1477,14 @@ static int qup_i2c_suspend(struct device *device)
 		dev_dbg(device, "system suspend");
 		i2c_qup_pm_suspend_runtime(device);
 	}
+
+#if defined(CONFIG_MACH_APQ8064_AWIFI) || defined(CONFIG_MACH_APQ8064_ALTEV)
+	if (!strncmp(dev_name(device), "qup_i2c.3", 9)){
+		dev_info(device, "%s atmel_touch_i2c_suspended = true\n", __func__);
+		atmel_touch_i2c_suspended = true;
+	}
+#endif
+
 	return 0;
 }
 
@@ -1462,8 +1498,39 @@ static int qup_i2c_resume(struct device *device)
 			pm_runtime_mark_last_busy(device);
 			pm_request_autosuspend(device);
 		}
+
+#if defined(CONFIG_MACH_APQ8064_AWIFI) || defined(CONFIG_MACH_APQ8064_ALTEV)
+		if (!strncmp(dev_name(device), "qup_i2c.3", 9)){
+			dev_info(device, "%s atmel_touch_i2c_suspended = false\n", __func__);
+			atmel_touch_i2c_suspended = false;
+		}
+#endif
 		return ret;
 	}
+
+#if 0//def CONFIG_MACH_APQ8064_AWIFI
+	//                                                                
+	if (pm_runtime_suspended(device)) {
+		dev_info(device, "i2c is runtime suspended status !!! try to runtime resume !!!\n");
+	}
+
+	if (!pm_runtime_enabled(device)) {
+		dev_info(device, "Runtime PM is disabled\n");
+		i2c_qup_pm_resume_runtime(device);
+	} else {
+		pm_runtime_get_sync(device);
+	}
+
+	if (pm_runtime_suspended(device)) {
+		dev_info(device, "i2c can't wake up !!! pm_runtime_get_sync() doesn't work !!!\n");
+	}
+#endif
+#if defined(CONFIG_MACH_APQ8064_AWIFI) || defined(CONFIG_MACH_APQ8064_ALTEV)
+	if (!strncmp(dev_name(device), "qup_i2c.3", 9)){
+		dev_info(device, "%s atmel_touch_i2c_suspended = false\n", __func__);
+		atmel_touch_i2c_suspended = false;
+	}
+#endif
 	return 0;
 }
 #endif /* CONFIG_PM */

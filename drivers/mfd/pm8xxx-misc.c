@@ -182,6 +182,41 @@ static int pm8xxx_misc_masked_write(struct pm8xxx_misc_chip *chip, u16 addr,
 	return rc;
 }
 
+/**
+ * pm8xxx_read_register - Read a PMIC register
+ * @addr: PMIC register address
+ * @value: Output parameter which gets the value of the register read.
+ * RETURNS: an appropriate -ERRNO error value on error, or zero for success.
+ */
+int pm8xxx_read_register(u16 addr, u8 *value)
+{
+	struct pm8xxx_misc_chip *chip;
+	unsigned long flags;
+	int rc = 0;
+
+	spin_lock_irqsave(&pm8xxx_misc_chips_lock, flags);
+
+	/* Loop over all attached PMICs and call specific functions for them. */
+	list_for_each_entry(chip, &pm8xxx_misc_chips, link) {
+		switch (chip->version) {
+		case PM8XXX_VERSION_8921:
+			rc = pm8xxx_readb(chip->dev->parent, addr, value);
+			if (rc) {
+				pr_err("pm8xxx_readb(0x%03X) failed, rc=%d\n",
+								addr, rc);
+				break;
+			}
+		default:
+			break;
+		}
+	}
+
+	spin_unlock_irqrestore(&pm8xxx_misc_chips_lock, flags);
+
+	return rc;
+}
+EXPORT_SYMBOL_GPL(pm8xxx_read_register);
+
 /*
  * Set an SMPS regulator to be disabled in its CTRL register, but enabled
  * in the master enable register.  Also set it's pull down enable bit.
@@ -1160,6 +1195,9 @@ int pm8xxx_hsed_bias_control(enum pm8xxx_hsed_bias bias, bool enable)
 }
 EXPORT_SYMBOL(pm8xxx_hsed_bias_control);
 
+#if defined (CONFIG_MACH_APQ8064_OMEGAR)
+extern int pmic_reset_irq;
+#endif
 static int __devinit pm8xxx_misc_probe(struct platform_device *pdev)
 {
 	const struct pm8xxx_misc_platform_data *pdata = pdev->dev.platform_data;
@@ -1210,6 +1248,11 @@ static int __devinit pm8xxx_misc_probe(struct platform_device *pdev)
 	spin_unlock_irqrestore(&pm8xxx_misc_chips_lock, flags);
 
 	platform_set_drvdata(pdev, chip);
+
+#if defined (CONFIG_MACH_APQ8064_OMEGAR)
+    disable_irq_nosync(pmic_reset_irq);
+	pm8xxx_hard_reset_config(PM8XXX_DISABLE_HARD_RESET);
+#endif
 
 	return rc;
 

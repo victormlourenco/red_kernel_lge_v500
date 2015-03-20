@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -14,7 +14,6 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/cpuidle.h>
-#include <linux/cpu_pm.h>
 
 #include <mach/cpuidle.h>
 
@@ -34,7 +33,30 @@ static struct msm_cpuidle_state msm_cstates[] = {
 	{0, 1, "C1", "RETENTION",
 		MSM_PM_SLEEP_MODE_RETENTION},
 
-	{0, 2, "C2", "STANDALONE_POWER_COLLAPSE",
+#ifndef CONFIG_LGE_USE_STANDALONE_POWER_COLLAPSE
+	{0, 2, "C3", "POWER_COLLAPSE",
+		MSM_PM_SLEEP_MODE_POWER_COLLAPSE},
+
+	{0, 3, "C0", "WFI",
+		MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT},
+
+	{1, 0, "C1", "RETENTION",
+		MSM_PM_SLEEP_MODE_RETENTION},
+
+	{1, 1, "C0", "WFI",
+		MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT},
+
+	{1, 2, "C1", "RETENTION",
+		MSM_PM_SLEEP_MODE_RETENTION},
+
+	{2, 0, "C0", "WFI",
+		MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT},
+
+	{2, 1, "C1", "RETENTION",
+		MSM_PM_SLEEP_MODE_RETENTION},
+#else
+      /* QCT original code*/
+       {0, 2, "C2", "STANDALONE_POWER_COLLAPSE",
 		MSM_PM_SLEEP_MODE_POWER_COLLAPSE_STANDALONE},
 
 	{0, 3, "C3", "POWER_COLLAPSE",
@@ -66,6 +88,8 @@ static struct msm_cpuidle_state msm_cstates[] = {
 
 	{3, 2, "C2", "STANDALONE_POWER_COLLAPSE",
 		MSM_PM_SLEEP_MODE_POWER_COLLAPSE_STANDALONE},
+
+#endif
 };
 
 static int msm_cpuidle_enter(
@@ -75,10 +99,6 @@ static int msm_cpuidle_enter(
 	int i = 0;
 	enum msm_pm_sleep_mode pm_mode;
 	struct cpuidle_state_usage *st_usage = NULL;
-
-#ifdef CONFIG_CPU_PM
-	cpu_pm_enter();
-#endif
 
 	pm_mode = msm_pm_idle_prepare(dev, drv, index);
 	dev->last_residency = msm_pm_idle_enter(pm_mode);
@@ -91,9 +111,6 @@ static int msm_cpuidle_enter(
 		}
 	}
 
-#ifdef CONFIG_CPU_PM
-	cpu_pm_exit();
-#endif
 
 	local_irq_enable();
 

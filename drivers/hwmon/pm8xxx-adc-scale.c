@@ -25,7 +25,124 @@
    and provided to the battery driver in the units desired for
    their framework which is 0.1DegC. True resolution of 0.1DegC
    will result in the below table size to increase by 10 times */
-static struct pm8xxx_adc_map_pt def_adcmap_btm_threshold[] = {
+static const struct pm8xxx_adc_map_pt adcmap_btm_threshold[] = {
+#ifdef CONFIG_LGE_PM
+/*
+ * board speficic thermistor characteristic
+ * Rev.C (Real B): pull-up registor 105.0Kohm, series resistor = 16.0Kohm
+ * Please don't change below values.
+ */
+	{-300,	1675},
+	{-290,	1667},
+	{-280,	1659},
+	{-270,	1651},
+	{-260,	1642},
+	{-250,	1633},
+	{-240,	1623},
+	{-230,	1613},
+	{-220,	1602},
+	{-210,	1592},
+	{-200,	1580},
+	{-190,	1568},
+	{-180,	1556},
+	{-170,	1544},
+	{-160,	1531},
+	{-150,	1517},
+	{-140,	1503},
+	{-130,	1489},
+	{-120,	1474},
+	{-110,	1459},
+	{-100,	1444},
+	{-90,	1428},
+	{-80,	1412},
+	{-70,	1395},
+	{-60,	1378},
+	{-50,	1361},
+	{-40,	1343},
+	{-30,	1325},
+	{-20,	1307},
+	{-10,	1289},
+	{0, 	1270},
+	{10,	1251},
+	{20,	1232},
+	{30,	1213},
+	{40,	1194},
+	{50,	1174},
+	{60,	1155},
+	{70,	1135},
+	{80,	1115},
+	{90,	1096},
+	{100,	1076},
+	{110,	1057},
+	{120,	1037},
+	{130,	1018},
+	{140,	999},
+	{150,	980},
+	{160,	961},
+	{170,	942},
+	{180,	923},
+	{190,	905},
+	{200,	887},
+	{210,	869},
+	{220,	851},
+	{230,	834},
+	{240,	817},
+	{250,	800},
+	{260,	784},
+	{270,	767},
+	{280,	752},
+	{290,	736},
+	{300,	721},
+	{310,	706},
+	{320,	692},
+	{330,	678},
+	{340,	664},
+	{350,	650},
+	{360,	637},
+	{370,	625},
+	{380,	612},
+	{390,	600},
+	{400,	589},
+	{410,	577},
+	{420,	566},
+	{430,	555},
+	{440,	545},
+	{450,	535},
+	{460,	525},
+	{470,	516},
+	{480,	506},
+	{490,	498},
+	{500,	489},
+	{510,	481},
+	{520,	473},
+	{530,	465},
+	{540,	457},
+	{550,	450},
+	{560,	443},
+	{570,	436},
+	{580,	429},
+	{590,	423},
+	{600,	417},
+	{610,	411},
+	{620,	405},
+	{630,	400},
+	{640,	394},
+	{650,	389},
+	{660,	384},
+	{670,	379},
+	{680,	375},
+	{690,	370},
+	{700,	366},
+	{710,	362},
+	{720,	358},
+	{730,	354},
+	{740,	350},
+	{750,	346},
+	{760,	343},
+	{770,	339},
+	{780,	336},
+	{790,	333}
+#else /* qualcomm original code */
 	{-300,	1642},
 	{-200,	1544},
 	{-100,	1414},
@@ -109,9 +226,26 @@ static struct pm8xxx_adc_map_pt def_adcmap_btm_threshold[] = {
 	{770,	213},
 	{780,	208},
 	{790,	203}
+#endif
 };
 
-static struct pm8xxx_adc_map_pt def_adcmap_pa_therm[] = {
+static const struct pm8xxx_adc_map_pt adcmap_apq_therm[] = {
+/* APQ THERM placeholder for voltage to temperature mapping */
+/* e.g. and for reference only */
+	{2121,	-30},
+	{2085,  -25},
+	{2040,	-20},
+	{1913,	-10},
+	{1732,	0},
+	{1502,	10},
+	{1242,	20},
+	{981,	30},
+	{746,	40},
+	{553,	50},
+	{403,	60},
+};
+
+static const struct pm8xxx_adc_map_pt adcmap_pa_therm[] = {
 	{1731,	-30},
 	{1726,	-29},
 	{1721,	-28},
@@ -270,7 +404,7 @@ static struct pm8xxx_adc_map_pt def_adcmap_pa_therm[] = {
 	{49,	125}
 };
 
-static struct pm8xxx_adc_map_pt def_adcmap_ntcg_104ef_104fb[] = {
+static const struct pm8xxx_adc_map_pt adcmap_ntcg_104ef_104fb[] = {
 	{696483,	-40960},
 	{649148,	-39936},
 	{605368,	-38912},
@@ -438,40 +572,6 @@ static struct pm8xxx_adc_map_pt def_adcmap_ntcg_104ef_104fb[] = {
 	{431,		126976},
 	{419,		128000}
 };
-
-static struct pm8xxx_adc_map adcmap_btm_threshold = {
-	.pt = def_adcmap_btm_threshold,
-	.size = ARRAY_SIZE(def_adcmap_btm_threshold),
-};
-static struct pm8xxx_adc_map adcmap_pa_therm = {
-	.pt = def_adcmap_pa_therm,
-	.size = ARRAY_SIZE(def_adcmap_pa_therm),
-};
-static struct pm8xxx_adc_map adcmap_ntcg_104ef_104fb = {
-	.pt = def_adcmap_ntcg_104ef_104fb,
-	.size = ARRAY_SIZE(def_adcmap_ntcg_104ef_104fb),
-};
-
-void pm8xxx_set_adcmap_btm_threshold(void *pts, int size)
-{
-	adcmap_btm_threshold.pt = pts;
-	adcmap_btm_threshold.size = size;
-}
-EXPORT_SYMBOL(pm8xxx_set_adcmap_btm_threshold);
-
-void pm8xxx_set_adcmap_pa_therm(void *pts, int size)
-{
-	adcmap_pa_therm.pt = pts;
-	adcmap_pa_therm.size = size;
-}
-EXPORT_SYMBOL(pm8xxx_set_adcmap_pa_therm);
-
-void pm8xxx_set_adcmap_ntcg_104ef_104fb(void *pts, int size)
-{
-	adcmap_ntcg_104ef_104fb.pt = pts;
-	adcmap_ntcg_104ef_104fb.size = size;
-}
-EXPORT_SYMBOL(pm8xxx_set_adcmap_ntcg_104ef_104fb);
 
 static int32_t pm8xxx_adc_map_linear(const struct pm8xxx_adc_map_pt *pts,
 		uint32_t tablesize, int32_t input, int64_t *output)
@@ -645,6 +745,37 @@ static int64_t pm8xxx_adc_scale_ratiometric_calib(int32_t adc_code,
 	return adc_voltage;
 }
 
+#if (defined(CONFIG_MACH_APQ8064_OMEGAR_KR) || defined(CONFIG_MACH_APQ8064_OMEGA_KR)) && defined(CONFIG_TOUCHSCREEN_SYNAPTICS_I2C_RMI4)
+#define TOUCH_BATT_TEMPERATURE_DEGREE	45*10
+#define TOUCH_BATT_THERMAL_THRESHOLD	2*10
+#define TOUCH_TEMPERATURE_DEGREE	50
+#define TOUCH_THERMAL_THRESHOLD	3
+int touch_thermal_mode = 0;
+static int64_t touch_batt_temperature = 0;
+static int64_t touch_apq_temperature = 0;
+extern  void check_touch_xo_therm(int type);
+
+int check_touch_need_therm_mode(void)
+{
+	if(touch_batt_temperature >= TOUCH_BATT_TEMPERATURE_DEGREE && touch_apq_temperature >= TOUCH_TEMPERATURE_DEGREE)
+	{
+		touch_thermal_mode = 11; /* apq_therm is already high. 11 means that both batt_therm and apq_therm are high.*/
+		return 1;
+	}
+	else if(touch_batt_temperature >= TOUCH_BATT_TEMPERATURE_DEGREE)
+	{
+		touch_thermal_mode = 10; /* only batt_therm is high.*/
+		return 1;
+	}
+	else if(touch_apq_temperature >= TOUCH_TEMPERATURE_DEGREE)
+	{
+		touch_thermal_mode = 1; /* only apq_therm is high.*/
+		return 1;
+	}else
+		return 0;
+}
+#endif
+
 int32_t pm8xxx_adc_scale_batt_therm(int32_t adc_code,
 		const struct pm8xxx_adc_properties *adc_properties,
 		const struct pm8xxx_adc_chan_properties *chan_properties,
@@ -654,12 +785,39 @@ int32_t pm8xxx_adc_scale_batt_therm(int32_t adc_code,
 
 	bat_voltage = pm8xxx_adc_scale_ratiometric_calib(adc_code,
 			adc_properties, chan_properties);
-
-	return pm8xxx_adc_map_batt_therm(
-			adcmap_btm_threshold.pt,
-			adcmap_btm_threshold.size,
+#ifdef CONFIG_MACH_APQ8064_ALTEV
+	adc_chan_result->adc_value = bat_voltage;
+#endif
+#if (defined(CONFIG_MACH_APQ8064_OMEGAR_KR) || defined(CONFIG_MACH_APQ8064_OMEGA_KR)) && defined(CONFIG_TOUCHSCREEN_SYNAPTICS_I2C_RMI4)
+	{
+		int32_t result = 0;
+		result = pm8xxx_adc_map_batt_therm(
+			adcmap_btm_threshold,
+			ARRAY_SIZE(adcmap_btm_threshold),
 			bat_voltage,
 			&adc_chan_result->physical);
+
+		touch_batt_temperature = adc_chan_result->physical;
+		if(touch_thermal_mode == 0 && adc_chan_result->physical >= TOUCH_BATT_TEMPERATURE_DEGREE) {
+			touch_thermal_mode = 10; /* only batt_therm is high.*/
+			check_touch_xo_therm(1);
+		} else if(touch_thermal_mode == 1 && adc_chan_result->physical >= TOUCH_BATT_TEMPERATURE_DEGREE){
+			touch_thermal_mode = 11; /* apq_therm is already high. 11 means that both batt_therm and apq_therm are high.*/
+		} else if(touch_thermal_mode == 10 && adc_chan_result->physical < (TOUCH_BATT_TEMPERATURE_DEGREE-TOUCH_BATT_THERMAL_THRESHOLD)){
+			touch_thermal_mode = 0; /* 10 means that only batt_therm was high.*/
+			check_touch_xo_therm(0);
+		} else if(touch_thermal_mode == 11 && adc_chan_result->physical < (TOUCH_BATT_TEMPERATURE_DEGREE-TOUCH_BATT_THERMAL_THRESHOLD)){
+			touch_thermal_mode = 1; /* apq_therm remains high.*/
+		}
+		return result;
+	}
+#else
+	return pm8xxx_adc_map_batt_therm(
+			adcmap_btm_threshold,
+			ARRAY_SIZE(adcmap_btm_threshold),
+			bat_voltage,
+			&adc_chan_result->physical);
+#endif
 }
 EXPORT_SYMBOL_GPL(pm8xxx_adc_scale_batt_therm);
 
@@ -672,14 +830,68 @@ int32_t pm8xxx_adc_scale_pa_therm(int32_t adc_code,
 
 	pa_voltage = pm8xxx_adc_scale_ratiometric_calib(adc_code,
 			adc_properties, chan_properties);
-
+#ifdef CONFIG_MACH_APQ8064_ALTEV
+    adc_chan_result->adc_value = pa_voltage;
+#endif
 	return pm8xxx_adc_map_linear(
-			adcmap_pa_therm.pt,
-			adcmap_pa_therm.size,
+			adcmap_pa_therm,
+			ARRAY_SIZE(adcmap_pa_therm),
 			pa_voltage,
 			&adc_chan_result->physical);
 }
 EXPORT_SYMBOL_GPL(pm8xxx_adc_scale_pa_therm);
+
+int32_t pm8xxx_adc_scale_apq_therm(int32_t adc_code,
+		const struct pm8xxx_adc_properties *adc_properties,
+		const struct pm8xxx_adc_chan_properties *chan_properties,
+		struct pm8xxx_adc_chan_result *adc_chan_result)
+{
+/* Reference only - Place holder to add APQ THERM */
+/* Initial addition by adding the pa_therm funtionlity above */
+	int64_t apq_voltage = 0;
+
+	apq_voltage = pm8xxx_adc_scale_ratiometric_calib(adc_code,
+			adc_properties, chan_properties);
+#if (defined(CONFIG_MACH_APQ8064_OMEGAR_KR) || defined(CONFIG_MACH_APQ8064_OMEGA_KR)) && defined(CONFIG_TOUCHSCREEN_SYNAPTICS_I2C_RMI4)
+	{
+		int32_t result = 0;
+		result = pm8xxx_adc_map_linear(
+			adcmap_apq_therm,
+			ARRAY_SIZE(adcmap_apq_therm),
+			apq_voltage,
+			&adc_chan_result->physical);
+
+		touch_apq_temperature = adc_chan_result->physical;
+		if(touch_thermal_mode == 0 && adc_chan_result->physical >= TOUCH_TEMPERATURE_DEGREE) {
+			touch_thermal_mode = 1; /* only apq_therm is high.*/
+			check_touch_xo_therm(1);
+		} else if(touch_thermal_mode == 10 && adc_chan_result->physical >= TOUCH_TEMPERATURE_DEGREE){
+			touch_thermal_mode = 11; /* batt_therm is already high. 11 means that both batt_therm and apq_therm are high.*/
+		} else if(touch_thermal_mode == 1 && adc_chan_result->physical < (TOUCH_TEMPERATURE_DEGREE-TOUCH_THERMAL_THRESHOLD)){
+			touch_thermal_mode = 0; /* 1 means that only apq_therm was high.*/
+			check_touch_xo_therm(0);
+		} else if(touch_thermal_mode == 11 && adc_chan_result->physical < (TOUCH_TEMPERATURE_DEGREE-TOUCH_THERMAL_THRESHOLD)){
+			touch_thermal_mode = 10; /*batt_therm remains high.*/
+		}
+		return result;
+	}
+#else
+#ifdef CONFIG_MACH_APQ8064_ALTEV
+    adc_chan_result->adc_value = apq_voltage;
+#endif
+	return pm8xxx_adc_map_linear(
+#if defined(CONFIG_MACH_APQ8064_ALTEV) || defined(CONFIG_MACH_APQ8064_AWIFI) || defined(CONFIG_MACH_APQ8064_L05E)
+			adcmap_pa_therm,
+                        ARRAY_SIZE(adcmap_pa_therm),
+#else
+			adcmap_apq_therm,
+                        ARRAY_SIZE(adcmap_apq_therm),			
+#endif
+			apq_voltage,
+			&adc_chan_result->physical);
+#endif
+}
+EXPORT_SYMBOL_GPL(pm8xxx_adc_scale_apq_therm);
 
 int32_t pm8xxx_adc_scale_batt_id(int32_t adc_code,
 		const struct pm8xxx_adc_properties *adc_properties,
@@ -759,8 +971,8 @@ int32_t pm8xxx_adc_tdkntcg_therm(int32_t adc_code,
 	xo_thm = pm8xxx_adc_scale_ratiometric_calib(adc_code,
 			adc_properties, chan_properties);
 	xo_thm <<= 4;
-	pm8xxx_adc_map_linear(adcmap_ntcg_104ef_104fb.pt,
-		adcmap_ntcg_104ef_104fb.size,
+	pm8xxx_adc_map_linear(adcmap_ntcg_104ef_104fb,
+		ARRAY_SIZE(adcmap_ntcg_104ef_104fb),
 		xo_thm, &adc_chan_result->physical);
 
 	return 0;
@@ -774,8 +986,8 @@ int32_t pm8xxx_adc_batt_scaler(struct pm8xxx_adc_arb_btm_param *btm_param,
 	int rc;
 
 	rc = pm8xxx_adc_map_linear(
-		adcmap_btm_threshold.pt,
-		adcmap_btm_threshold.size,
+		adcmap_btm_threshold,
+		ARRAY_SIZE(adcmap_btm_threshold),
 		(btm_param->low_thr_temp),
 		&btm_param->low_thr_voltage);
 	if (rc)
@@ -788,8 +1000,8 @@ int32_t pm8xxx_adc_batt_scaler(struct pm8xxx_adc_arb_btm_param *btm_param,
 		chan_properties->adc_graph[ADC_CALIB_RATIOMETRIC].adc_gnd;
 
 	rc = pm8xxx_adc_map_linear(
-		adcmap_btm_threshold.pt,
-		adcmap_btm_threshold.size,
+		adcmap_btm_threshold,
+		ARRAY_SIZE(adcmap_btm_threshold),
 		(btm_param->high_thr_temp),
 		&btm_param->high_thr_voltage);
 	if (rc)

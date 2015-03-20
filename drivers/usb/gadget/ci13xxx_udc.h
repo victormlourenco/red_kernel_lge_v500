@@ -57,7 +57,7 @@ struct ci13xxx_td {
 #define TD_CURR_OFFSET        (0x0FFFUL <<  0)
 #define TD_FRAME_NUM          (0x07FFUL <<  0)
 #define TD_RESERVED_MASK      (0x0FFFUL <<  0)
-} __attribute__ ((packed));
+} __attribute__ ((packed, aligned(4)));
 
 /* DMA layout of queue heads */
 struct ci13xxx_qh {
@@ -75,7 +75,7 @@ struct ci13xxx_qh {
 	/* 9 */
 	u32 RESERVED;
 	struct usb_ctrlrequest   setup;
-} __attribute__ ((packed));
+} __attribute__ ((packed, aligned(4)));
 
 /* cache of larger request's original attributes */
 struct ci13xxx_multi_req {
@@ -139,9 +139,9 @@ struct ci13xxx_udc_driver {
 #define CI13XXX_CONTROLLER_RESET_EVENT			0
 #define CI13XXX_CONTROLLER_CONNECT_EVENT		1
 #define CI13XXX_CONTROLLER_SUSPEND_EVENT		2
-#define CI13XXX_CONTROLLER_REMOTE_WAKEUP_EVENT		3
-#define CI13XXX_CONTROLLER_RESUME_EVENT		4
-#define CI13XXX_CONTROLLER_DISCONNECT_EVENT		5
+#define CI13XXX_CONTROLLER_REMOTE_WAKEUP_EVENT	3
+#define CI13XXX_CONTROLLER_RESUME_EVENT	        4
+#define CI13XXX_CONTROLLER_DISCONNECT_EVENT	    5
 	void	(*notify_event) (struct ci13xxx *udc, unsigned event);
 };
 

@@ -1480,11 +1480,7 @@ long syscall_trace_enter(struct pt_regs *regs)
 		regs->flags |= X86_EFLAGS_TF;
 
 	/* do the secure computing check first */
-	if (secure_computing(regs->orig_ax)) {
-		/* seccomp failures shouldn't expose any additional code. */
-		ret = -1L;
-		goto out;
-	}
+	secure_computing(regs->orig_ax);
 
 	if (unlikely(test_thread_flag(TIF_SYSCALL_EMU)))
 		ret = -1L;
@@ -1509,7 +1505,6 @@ long syscall_trace_enter(struct pt_regs *regs)
 				    regs->dx, regs->r10);
 #endif
 
-out:
 	return ret ?: regs->orig_ax;
 }
 

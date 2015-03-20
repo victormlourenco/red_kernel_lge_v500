@@ -686,19 +686,8 @@ static void call_console_drivers(unsigned start, unsigned end)
 	start_print = start;
 	while (cur_index != end) {
 		if (msg_level < 0 && ((end - cur_index) > 2)) {
-			/*
-			 * prepare buf_prefix, as a contiguous array,
-			 * to be processed by log_prefix function
-			 */
-			char buf_prefix[SYSLOG_PRI_MAX_LENGTH+1];
-			unsigned i;
-			for (i = 0; i < ((end - cur_index)) && (i < SYSLOG_PRI_MAX_LENGTH); i++) {
-				buf_prefix[i] = LOG_BUF(cur_index + i);
-			}
-			buf_prefix[i] = '\0'; /* force '\0' as last string character */
-
 			/* strip log prefix */
-			cur_index += log_prefix((const char *)&buf_prefix, &msg_level, NULL);
+			cur_index += log_prefix(&LOG_BUF(cur_index), &msg_level, NULL);
 			start_print = cur_index;
 		}
 		while (cur_index != end) {
@@ -1000,6 +989,8 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 				/* Add the current time stamp */
 				char tbuf[50], *tp;
 				unsigned tlen;
+				/*                                                                                                       */
+#ifdef CONFIG_LGE_USE_CPU_CLOCK_TIMESTAMP
 				unsigned long long t;
 				unsigned long nanosec_rem;
 
@@ -1008,7 +999,29 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 				tlen = sprintf(tbuf, "[%5lu.%06lu] ",
 						(unsigned long) t,
 						nanosec_rem / 1000);
+#else
+				unsigned long long t;
+				unsigned long nanosec_rem;
 
+				struct timespec time;
+				struct tm tmresult;
+
+				t = cpu_clock(printk_cpu);
+				nanosec_rem = do_div(t, 1000000000);
+
+				time = __current_kernel_time();
+				time_to_tm(time.tv_sec,sys_tz.tz_minuteswest * 60* (-1),&tmresult);
+				tlen = sprintf(tbuf, "[%5lu.%06lu / %02d-%02d %02d:%02d:%02d.%03lu] ",
+						(unsigned long) t,
+						nanosec_rem / 1000,
+						tmresult.tm_mon+1,
+						tmresult.tm_mday,
+						tmresult.tm_hour,
+						tmresult.tm_min,
+						tmresult.tm_sec,
+						(unsigned long) time.tv_nsec/1000000);
+#endif
+				/*                                                                                                       */
 				for (tp = tbuf; tp < tbuf + tlen; tp++)
 					emit_log_char(*tp);
 				printed_len += tlen;
@@ -1187,12 +1200,6 @@ module_param_named(console_suspend, console_suspend_enabled,
 		bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(console_suspend, "suspend console during suspend"
 	" and hibernate operations");
-
-/* check current suspend/resume status of the console */
-int is_console_suspended(void)
-{
-	return console_suspended;
-}
 
 /**
  * suspend_console - suspend the console subsystem

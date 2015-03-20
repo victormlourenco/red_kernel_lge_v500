@@ -1173,7 +1173,6 @@ static int __dev_open(struct net_device *dev)
 		net_dmaengine_get();
 		dev_set_rx_mode(dev);
 		dev_activate(dev);
-		add_device_randomness(dev->dev_addr, dev->addr_len);
 	}
 
 	return ret;
@@ -4787,7 +4786,6 @@ int dev_set_mac_address(struct net_device *dev, struct sockaddr *sa)
 	err = ops->ndo_set_mac_address(dev, sa);
 	if (!err)
 		call_netdevice_notifiers(NETDEV_CHANGEADDR, dev);
-	add_device_randomness(dev->dev_addr, dev->addr_len);
 	return err;
 }
 EXPORT_SYMBOL(dev_set_mac_address);
@@ -5566,7 +5564,6 @@ int register_netdevice(struct net_device *dev)
 	dev_init_scheduler(dev);
 	dev_hold(dev);
 	list_netdevice(dev);
-	add_device_randomness(dev->dev_addr, dev->addr_len);
 
 	/* Notify protocols, that a new device appeared. */
 	ret = call_netdevice_notifiers(NETDEV_REGISTER, dev);
@@ -5718,11 +5715,23 @@ static void netdev_wait_allrefs(struct net_device *dev)
 
 		refcnt = netdev_refcnt_read(dev);
 
+#if 1 /*                */
+        if (time_after(jiffies, warning_time + 3 * HZ)) {
+            pr_emerg("unregister_netdevice: %s timeout. Usage count = %d\n",
+                    dev->name, refcnt);
+            if (refcnt)
+            {
+                dev_put(dev);
+                refcnt = netdev_refcnt_read(dev);
+            }
+        }
+#else
 		if (time_after(jiffies, warning_time + 10 * HZ)) {
 			pr_emerg("unregister_netdevice: waiting for %s to become free. Usage count = %d\n",
 				 dev->name, refcnt);
 			warning_time = jiffies;
 		}
+#endif
 	}
 }
 

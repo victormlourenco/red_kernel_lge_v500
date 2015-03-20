@@ -49,7 +49,7 @@ snd-soc-twl6040-objs := twl6040.o
 snd-soc-uda134x-objs := uda134x.o
 snd-soc-uda1380-objs := uda1380.o
 snd-soc-wcd9304-objs := wcd9304.o wcd9304-tables.o
-snd-soc-wcd9310-objs := wcd9310.o wcd9310-tables.o
+snd-soc-wcd9310-objs := wcd9310.o wcd9310-tables.o wcdcal-hwdep.o
 snd-soc-cs8427-objs := cs8427.o
 snd-soc-wcd9320-objs := wcd9320.o wcd9320-tables.o
 snd-soc-wl1273-objs := wl1273.o
@@ -213,3 +213,8 @@ obj-$(CONFIG_SND_SOC_MSM_STUB)  += snd-soc-msm-stub.o
 obj-$(CONFIG_SND_SOC_MAX9877)	+= snd-soc-max9877.o
 obj-$(CONFIG_SND_SOC_TPA6130A2)	+= snd-soc-tpa6130a2.o
 obj-$(CONFIG_SND_SOC_TPA2028D)	+= tpa2028d.o
+obj-$(CONFIG_SND_SOC_TPA2028D_DUAL_SPEAKER) += tpa2028d_dual_speaker.o
+# CONFIG_LGE_AUDIO, 2012-11-17, Audience es325 ALSA SoC Audio driver
+ifeq ($(CONFIG_SND_SOC_ES325_SLIM),y)
+obj-$(CONFIG_SND_SOC_ES325_SLIM) += es325.o
+endif

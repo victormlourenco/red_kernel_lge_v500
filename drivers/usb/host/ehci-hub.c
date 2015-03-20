@@ -256,8 +256,11 @@ static int ehci_bus_suspend (struct usb_hcd *hcd)
 		else if ((t1 & PORT_PE) && !(t1 & PORT_SUSPEND)) {
 			/*clear RS bit before setting SUSP bit
 			* and wait for HCH to get set*/
-			if (ehci->susp_sof_bug)
+			if (ehci->susp_sof_bug) {
+				spin_unlock_irq(&ehci->lock);
 				ehci_halt(ehci);
+				spin_lock_irq(&ehci->lock);
+			}
 
 			t2 |= PORT_SUSPEND;
 			set_bit(port, &ehci->bus_suspended);
@@ -337,7 +340,7 @@ static int ehci_bus_suspend (struct usb_hcd *hcd)
 
 
 /* caller has locked the root hub, and should reset/reinit on error */
-static int ehci_bus_resume (struct usb_hcd *hcd)
+static int __maybe_unused ehci_bus_resume(struct usb_hcd *hcd)
 {
 	struct ehci_hcd		*ehci = hcd_to_ehci (hcd);
 	u32			temp;
@@ -1226,6 +1229,12 @@ static int ehci_hub_control (
 			} else {
 				ehci_writel(ehci, temp, status_reg);
 			}
+
+			if (ehci->reset_delay) {
+				spin_unlock_irqrestore(&ehci->lock, flags);
+				msleep(ehci->reset_delay);
+				spin_lock_irqsave(&ehci->lock, flags);
+			}
 			break;
 
 		/* For downstream facing ports (these):  one hub port is put
@@ -1250,7 +1259,9 @@ static int ehci_hub_control (
 							temp | PORT_SUSPEND,
 							sreg);
 				}
+				spin_unlock_irq(&ehci->lock);
 				ehci_halt(ehci);
+				spin_lock_irq(&ehci->lock);
 				temp = ehci_readl(ehci, status_reg);
 				temp |= selector << 16;
 				ehci_writel(ehci, temp, status_reg);

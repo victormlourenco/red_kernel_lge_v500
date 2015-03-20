@@ -38,11 +38,12 @@ uint32 hdmi_inp(uint32 offset);
  * Ref. HDMI 1.4a
  * Supplement-1 CEC Section 6, 7
  */
+#define CEC_MAX_OPERAND_SIZE 15
 struct hdmi_msm_cec_msg {
 	uint8 sender_id;
 	uint8 recvr_id;
 	uint8 opcode;
-	uint8 operand[15];
+	uint8 operand[CEC_MAX_OPERAND_SIZE];
 	uint8 frame_size;
 	uint8 retransmit;
 };
@@ -120,7 +121,7 @@ void hdmi_phy_reset(void);
 void hdmi_msm_reset_core(void);
 void hdmi_msm_init_phy(int video_format);
 void hdmi_msm_powerdown_phy(void);
-void hdmi_frame_ctrl_cfg(const struct hdmi_disp_mode_timing_type *timing);
+void hdmi_frame_ctrl_cfg(const struct msm_hdmi_mode_timing_info *timing);
 void hdmi_msm_phy_status_poll(void);
 #endif
 
@@ -131,5 +132,33 @@ void hdmi_msm_cec_msg_recv(void);
 void hdmi_msm_cec_one_touch_play(void);
 void hdmi_msm_cec_msg_send(struct hdmi_msm_cec_msg *msg);
 #endif /* CONFIG_FB_MSM_HDMI_MSM_PANEL_CEC_SUPPORT */
-void mhl_connect_api(boolean on);
+
+/*           
+                                           
+                                 
+ */
+#ifdef CONFIG_MACH_LGE
+
+/* FULL HD (MHL) */
+#if defined(CONFIG_MACH_APQ8064_GVDCM) || \
+	 defined(CONFIG_MACH_APQ8064_GVKDDI)
+#define LGE_DEFAULT_HDMI_VIDEO_RESOLUTION HDMI_VFRMT_1920x1080p30_16_9
+/* FULL HD (SLIMPORT) */
+#elif defined(CONFIG_MACH_APQ8064_GKKT) || \
+		defined(CONFIG_MACH_APQ8064_GKSK) || \
+		defined(CONFIG_MACH_APQ8064_GKU) || \
+		defined(CONFIG_MACH_APQ8064_OMEGAR) || \
+		defined(CONFIG_MACH_APQ8064_OMEGA) || \
+		defined(CONFIG_MACH_APQ8064_GKATT) || \
+		defined(CONFIG_MACH_APQ8064_GKGLOBAL) || \
+		defined(CONFIG_MACH_APQ8064_GVKT) || \
+		defined(CONFIG_MACH_APQ8064_AWIFI) || defined(CONFIG_MACH_APQ8064_ALTEV)
+#define LGE_DEFAULT_HDMI_VIDEO_RESOLUTION HDMI_VFRMT_1920x1080p60_16_9
+/* HD (Default) */
+#else
+#define LGE_DEFAULT_HDMI_VIDEO_RESOLUTION HDMI_VFRMT_1280x720p60_16_9
+#endif
+
+#endif /*                 */
+
 #endif /* __HDMI_MSM_H__ */

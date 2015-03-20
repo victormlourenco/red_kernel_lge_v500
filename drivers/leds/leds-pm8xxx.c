@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -52,6 +52,7 @@
 #define WLED_SYNC_REG			SSBI_REG_ADDR_WLED_CTRL(11)
 #define WLED_OVP_CFG_REG		SSBI_REG_ADDR_WLED_CTRL(13)
 #define WLED_BOOST_CFG_REG		SSBI_REG_ADDR_WLED_CTRL(14)
+#define WLED_RESISTOR_COMPENSATION_CFG_REG	SSBI_REG_ADDR_WLED_CTRL(15)
 #define WLED_HIGH_POLE_CAP_REG		SSBI_REG_ADDR_WLED_CTRL(16)
 
 #define WLED_STRINGS			0x03
@@ -76,8 +77,13 @@
 
 #define WLED_MAX_LEVEL			255
 #define WLED_8_BIT_MASK			0xFF
+#define WLED_4_BIT_MASK			0x0F
 #define WLED_8_BIT_SHFT			0x08
+#define WLED_4_BIT_SHFT			0x04
 #define WLED_MAX_DUTY_CYCLE		0xFFF
+
+#define WLED_RESISTOR_COMPENSATION_DEFAULT	20
+#define WLED_RESISTOR_COMPENSATION_MAX	320
 
 #define WLED_SYNC_VAL			0x07
 #define WLED_SYNC_RESET_VAL		0x00
@@ -137,6 +143,10 @@
 			_rgb_led_green << PM8XXX_ID_RGB_LED_GREEN | \
 			_rgb_led_blue << PM8XXX_ID_RGB_LED_BLUE, \
 	}
+
+#define PM8XXX_PWM_CURRENT_4MA		4
+#define PM8XXX_PWM_CURRENT_8MA		8
+#define PM8XXX_PWM_CURRENT_12MA		12
 
 /**
  * supported_leds - leds supported for each PMIC version
@@ -415,7 +425,7 @@ static int pm8xxx_adjust_brightness(struct led_classdev *led_cdev,
 	struct	pm8xxx_led_data *led;
 	led = container_of(led_cdev, struct pm8xxx_led_data, cdev);
 
-	if (!led->adjust_brightness)
+	if (!led->adjust_brightness || !led->cdev.max_brightness)
 		return value;
 
 	if (led->adjust_brightness == led->cdev.max_brightness)
@@ -439,6 +449,7 @@ static int pm8xxx_led_pwm_pattern_update(struct pm8xxx_led_data * led)
 	int temp = 0;
 	int pwm_max = 0;
 	int total_ms, on_ms;
+	int flags;
 
 	if (!led->pwm_duty_cycles || !led->pwm_duty_cycles->duty_pcts) {
 		dev_err(led->cdev.dev, "duty_cycles and duty_pcts is not exist\n");
@@ -492,11 +503,27 @@ static int pm8xxx_led_pwm_pattern_update(struct pm8xxx_led_data * led)
 		return -EINVAL;
 	}
 
+	flags = PM8XXX_LED_PWM_FLAGS;
+	switch (led->max_current) {
+	case PM8XXX_PWM_CURRENT_4MA:
+		flags |= PM_PWM_BANK_LO;
+		break;
+	case PM8XXX_PWM_CURRENT_8MA:
+		flags |= PM_PWM_BANK_HI;
+		break;
+	case PM8XXX_PWM_CURRENT_12MA:
+		flags |= (PM_PWM_BANK_LO | PM_PWM_BANK_HI);
+		break;
+	default:
+		flags |= (PM_PWM_BANK_LO | PM_PWM_BANK_HI);
+		break;
+	}
+
 	rc = pm8xxx_pwm_lut_config(led->pwm_dev, led->pwm_period_us,
 			led->pwm_duty_cycles->duty_pcts,
 			led->pwm_duty_cycles->duty_ms,
 			start_idx, idx_len, led->pwm_pause_lo, led->pwm_pause_hi,
-			PM8XXX_LED_PWM_FLAGS);
+			flags);
 
 	return rc;
 }
@@ -682,12 +709,13 @@ static enum led_brightness pm8xxx_led_get(struct led_classdev *led_cdev)
 static int __devinit init_wled(struct pm8xxx_led_data *led)
 {
 	int rc, i;
-	u8 val, num_wled_strings;
+	u8 val, num_wled_strings, comp;
+	u16 temp;
 
 	num_wled_strings = led->wled_cfg->num_strings;
 
 	/* program over voltage protection threshold */
-	if (led->wled_cfg->ovp_val > WLED_OVP_37V) {
+	if (led->wled_cfg->ovp_val > WLED_OVP_27V) {
 		dev_err(led->dev->parent, "Invalid ovp value");
 		return -EINVAL;
 	}
@@ -733,6 +761,46 @@ static int __devinit init_wled(struct pm8xxx_led_data *led)
 		dev_err(led->dev->parent, "can't write wled boost config"
 			" register rc=%d\n", rc);
 		return rc;
+	}
+
+	if (led->wled_cfg->comp_res_val) {
+		/* Add Validation for compensation resistor value */
+		if (!(led->wled_cfg->comp_res_val >=
+			WLED_RESISTOR_COMPENSATION_DEFAULT &&
+			led->wled_cfg->comp_res_val <=
+				WLED_RESISTOR_COMPENSATION_MAX &&
+			led->wled_cfg->comp_res_val %
+				WLED_RESISTOR_COMPENSATION_DEFAULT == 0)) {
+			dev_err(led->dev->parent, "Invalid Value " \
+			"for compensation register.\n");
+			return -EINVAL;
+		}
+
+		/* Compute the compensation resistor register value */
+		temp = led->wled_cfg->comp_res_val;
+		temp = (temp - WLED_RESISTOR_COMPENSATION_DEFAULT) /
+					WLED_RESISTOR_COMPENSATION_DEFAULT;
+		comp = (temp << WLED_4_BIT_SHFT);
+
+		rc = pm8xxx_readb(led->dev->parent,
+				WLED_RESISTOR_COMPENSATION_CFG_REG, &val);
+		if (rc) {
+			dev_err(led->dev->parent, "can't read wled " \
+			"resistor compensation config register rc=%d\n", rc);
+			return rc;
+		}
+
+		val = val && WLED_4_BIT_MASK;
+		val = val | comp;
+
+		/* program compenstation resistor register */
+		rc = pm8xxx_writeb(led->dev->parent,
+				WLED_RESISTOR_COMPENSATION_CFG_REG, val);
+		if (rc) {
+			dev_err(led->dev->parent, "can't write wled " \
+			"resistor compensation config register rc=%d\n", rc);
+			return rc;
+		}
 	}
 
 	/* program high pole capacitance */
@@ -922,6 +990,93 @@ static int pm8xxx_led_pwm_configure(struct pm8xxx_led_data *led)
 
 	return rc;
 }
+
+static ssize_t pm8xxx_led_max_current_store(struct device *dev,
+				struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+	struct pm8xxx_led_data *led;
+	ssize_t rc = -EINVAL;
+	char *after;
+	unsigned long state = simple_strtoul(buf, &after, 10);
+	size_t count = after - buf;
+
+	led = container_of(led_cdev, struct pm8xxx_led_data, cdev);
+
+	if (isspace(*after))
+		count++;
+
+	if (count == size) {
+		rc = count;
+		if(state > 20)
+			state = 20;
+		led->max_current = state;
+		led_lc_set(led, state/2);
+		printk(KERN_INFO "%s change max_current %lu\n", led_cdev->name, state/2);
+	}
+	return rc;
+}
+
+static DEVICE_ATTR(max_current, 0200, NULL, pm8xxx_led_max_current_store);
+
+static ssize_t pm8xxx_led_adjust_brightness_store(struct device *dev,
+				struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+	struct pm8xxx_led_data *led;
+
+	ssize_t rc = -EINVAL;
+	char *after;
+	unsigned long state = simple_strtoul(buf, &after, 10);
+	size_t count = after - buf;
+
+	led = container_of(led_cdev, struct pm8xxx_led_data, cdev);
+
+	if (isspace(*after))
+		count++;
+
+	if (count == size) {
+		rc = count;
+		if(state > 100)
+			state = 100;
+		led->adjust_brightness = state;
+		printk(KERN_INFO "%s change adjust_brightness %lu\n", led_cdev->name, state);
+	}
+	return rc;
+}
+
+static DEVICE_ATTR(adjust_brightness, 0200, NULL, pm8xxx_led_adjust_brightness_store);
+
+static ssize_t pm8xxx_led_status_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	const struct pm8xxx_led_platform_data *pdata = dev->platform_data;
+	struct pm8xxx_led_data *leds =  (struct pm8xxx_led_data *)dev_get_drvdata(dev);
+	int start_idx = 0, idx_len = 0;
+	int i, j, n = 0;
+
+	for (i = 0; i < pdata->num_configs; i++)
+	{
+		n += sprintf(&buf[n], "[%d] %s blink %d, adjust %d, max_current %d\n",
+				i, leds[i].cdev.name, leds[i].blink, leds[i].adjust_brightness, leds[i].max_current);
+		if (leds[i].pwm_duty_cycles != NULL && leds[i].pwm_duty_cycles->duty_pcts != NULL) {
+			start_idx = leds[i].pwm_duty_cycles->start_idx;
+			idx_len = leds[i].pwm_duty_cycles->num_duty_pcts;
+			for (j = 0; j < idx_len; j++)
+			{
+				n += sprintf(&buf[n], "%d ",
+						leds[i].pwm_duty_cycles->duty_pcts[j]);
+			}
+			n += sprintf(&buf[n], "\n");
+		}
+		else
+			n += sprintf(&buf[n], "not exist\n");
+
+	}
+	return n;
+}
+
+static DEVICE_ATTR(status, 0444, pm8xxx_led_status_show, NULL);
 
 static ssize_t pm8xxx_led_lock_update_show(struct device *dev,
 		                struct device_attribute *attr, char *buf)
@@ -1209,6 +1364,11 @@ static int __devinit pm8xxx_led_probe(struct platform_device *pdev)
 			goto fail_id_check;
 		}
 
+		//rc = device_create_file(&pdev->dev, &dev_attr_max_current);
+		//rc = device_create_file(&pdev->dev, &dev_attr_adjust_brightness);
+		rc = device_create_file(led_dat->cdev.dev, &dev_attr_max_current);
+		rc = device_create_file(led_dat->cdev.dev, &dev_attr_adjust_brightness);
+
 		/* configure default state */
 		if (led_cfg->default_state)
 			led_dat->cdev.brightness = led_dat->cdev.max_brightness;
@@ -1253,6 +1413,8 @@ static int __devinit pm8xxx_led_probe(struct platform_device *pdev)
 		device_remove_file(&pdev->dev, &dev_attr_lock);
 		dev_err(&pdev->dev, "failed device_create_file(lock)\n");
 	}
+
+	rc = device_create_file(&pdev->dev, &dev_attr_status);
 
 	if (led->use_pwm) {
 		rc = device_create_file(&pdev->dev, &dev_attr_blink);

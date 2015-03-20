@@ -25,6 +25,11 @@
 
 static unsigned int no_data_ports;
 
+#if defined(CONFIG_USB_G_LGE_ANDROID) && !defined(CONFIG_LGE_MSM_HSIC_TTY)
+struct gdata_port;
+int atcmd_write_toatd(struct gdata_port *port, struct sk_buff *skb);
+#endif
+
 #define GHSIC_DATA_RMNET_RX_Q_SIZE		50
 #define GHSIC_DATA_RMNET_TX_Q_SIZE		300
 #define GHSIC_DATA_SERIAL_RX_Q_SIZE		10
@@ -118,6 +123,12 @@ struct gdata_port {
 	unsigned int		tx_unthrottled_cnt;
 	unsigned int		tomodem_drp_cnt;
 	unsigned int		unthrottled_pnd_skbs;
+#if defined(CONFIG_USB_G_LGE_ANDROID) && !defined(CONFIG_LGE_MSM_HSIC_TTY)
+    struct tty_struct *tty;
+    struct mutex tty_lock;
+    unsigned open_count;
+    bool openclose;
+#endif
 };
 
 static struct {
@@ -144,22 +155,25 @@ static void ghsic_data_free_requests(struct usb_ep *ep, struct list_head *head)
 static int ghsic_data_alloc_requests(struct usb_ep *ep, struct list_head *head,
 		int num,
 		void (*cb)(struct usb_ep *ep, struct usb_request *),
-		gfp_t flags)
+		spinlock_t *lock)
 {
 	int			i;
 	struct usb_request	*req;
+	unsigned long		flags;
 
 	pr_debug("%s: ep:%s head:%p num:%d cb:%p", __func__,
 			ep->name, head, num, cb);
 
 	for (i = 0; i < num; i++) {
-		req = usb_ep_alloc_request(ep, flags);
+		req = usb_ep_alloc_request(ep, GFP_KERNEL);
 		if (!req) {
 			pr_debug("%s: req allocated:%d\n", __func__, i);
 			return list_empty(head) ? -ENOMEM : 0;
 		}
 		req->complete = cb;
+		spin_lock_irqsave(lock, flags);
 		list_add(&req->list, head);
+		spin_unlock_irqrestore(lock, flags);
 	}
 
 	return 0;
@@ -236,6 +250,9 @@ static void ghsic_data_write_tohost(struct work_struct *w)
 			dev_kfree_skb_any(skb);
 			break;
 		}
+#if defined(CONFIG_USB_G_LGE_ANDROID) && defined(VERBOSE_DEBUG)
+        print_hex_dump(KERN_DEBUG, "tohost:", DUMP_PREFIX_OFFSET, 16, 1, skb->data, skb->len, 1);
+#endif
 		port->to_host++;
 		if (ghsic_data_fctrl_support &&
 			port->tx_skb_q.qlen <= ghsic_data_fctrl_dis_thld &&
@@ -309,6 +326,20 @@ static void ghsic_data_write_tomdm(struct work_struct *w)
 		pr_debug("%s: port:%p tom:%lu pno:%d\n", __func__,
 				port, port->to_modem, port->port_num);
 
+#if defined(CONFIG_USB_G_LGE_ANDROID) && !defined(CONFIG_LGE_MSM_HSIC_TTY)
+        if (port->port_num == 0) /* modem */
+        {
+            ret = atcmd_write_toatd(port, skb);
+            if (ret == 0) {
+                continue;
+            } else if (ret == -EBUSY) {
+                /*flow control*/
+                port->tx_throttled_cnt++;
+                break;
+            }
+        }
+#endif
+
 		info = (struct timestamp_info *)skb->cb;
 		info->rx_done_sent = get_timestamp();
 		spin_unlock_irqrestore(&port->rx_lock, flags);
@@ -326,6 +357,9 @@ static void ghsic_data_write_tomdm(struct work_struct *w)
 			dev_kfree_skb_any(skb);
 			break;
 		}
+#if defined(CONFIG_USB_G_LGE_ANDROID) && defined(VERBOSE_DEBUG)
+        print_hex_dump(KERN_DEBUG, "tomdm:", DUMP_PREFIX_OFFSET, 16, 1, skb->data, skb->len, 1);
+#endif
 		port->to_modem++;
 	}
 	spin_unlock_irqrestore(&port->rx_lock, flags);
@@ -431,20 +465,23 @@ static void ghsic_data_start_rx(struct gdata_port *port)
 
 		req = list_first_entry(&port->rx_idle,
 					struct usb_request, list);
+		list_del(&req->list);
+		spin_unlock_irqrestore(&port->rx_lock, flags);
 
 		created = get_timestamp();
-		skb = alloc_skb(ghsic_data_rx_req_size, GFP_ATOMIC);
-		if (!skb)
+		skb = alloc_skb(ghsic_data_rx_req_size, GFP_KERNEL);
+		if (!skb) {
+			spin_lock_irqsave(&port->rx_lock, flags);
+			list_add(&req->list, &port->rx_idle);
 			break;
+		}
 		info = (struct timestamp_info *)skb->cb;
 		info->created = created;
-		list_del(&req->list);
 		req->buf = skb->data;
 		req->length = ghsic_data_rx_req_size;
 		req->context = skb;
 
 		info->rx_queued = get_timestamp();
-		spin_unlock_irqrestore(&port->rx_lock, flags);
 		ret = usb_ep_queue(ep, req, GFP_KERNEL);
 		spin_lock_irqsave(&port->rx_lock, flags);
 		if (ret) {
@@ -465,7 +502,7 @@ static void ghsic_data_start_rx(struct gdata_port *port)
 static void ghsic_data_start_io(struct gdata_port *port)
 {
 	unsigned long	flags;
-	struct usb_ep	*ep;
+	struct usb_ep	*ep_out, *ep_in;
 	int		ret;
 
 	pr_debug("%s: port:%p\n", __func__, port);
@@ -474,37 +511,37 @@ static void ghsic_data_start_io(struct gdata_port *port)
 		return;
 
 	spin_lock_irqsave(&port->rx_lock, flags);
-	ep = port->out;
-	if (!ep) {
-		spin_unlock_irqrestore(&port->rx_lock, flags);
+	ep_out = port->out;
+	spin_unlock_irqrestore(&port->rx_lock, flags);
+	if (!ep_out)
 		return;
-	}
 
-	ret = ghsic_data_alloc_requests(ep, &port->rx_idle,
-		port->rx_q_size, ghsic_data_epout_complete, GFP_ATOMIC);
+	ret = ghsic_data_alloc_requests(ep_out, &port->rx_idle,
+		port->rx_q_size, ghsic_data_epout_complete, &port->rx_lock);
 	if (ret) {
 		pr_err("%s: rx req allocation failed\n", __func__);
+		return;
+	}
+
+	spin_lock_irqsave(&port->tx_lock, flags);
+	ep_in = port->in;
+	spin_unlock_irqrestore(&port->tx_lock, flags);
+	if (!ep_in) {
+		spin_lock_irqsave(&port->rx_lock, flags);
+		ghsic_data_free_requests(ep_out, &port->rx_idle);
 		spin_unlock_irqrestore(&port->rx_lock, flags);
 		return;
 	}
-	spin_unlock_irqrestore(&port->rx_lock, flags);
 
-	spin_lock_irqsave(&port->tx_lock, flags);
-	ep = port->in;
-	if (!ep) {
-		spin_unlock_irqrestore(&port->tx_lock, flags);
-		return;
-	}
-
-	ret = ghsic_data_alloc_requests(ep, &port->tx_idle,
-		port->tx_q_size, ghsic_data_epin_complete, GFP_ATOMIC);
+	ret = ghsic_data_alloc_requests(ep_in, &port->tx_idle,
+		port->tx_q_size, ghsic_data_epin_complete, &port->tx_lock);
 	if (ret) {
 		pr_err("%s: tx req allocation failed\n", __func__);
-		ghsic_data_free_requests(ep, &port->rx_idle);
-		spin_unlock_irqrestore(&port->tx_lock, flags);
+		spin_lock_irqsave(&port->rx_lock, flags);
+		ghsic_data_free_requests(ep_out, &port->rx_idle);
+		spin_unlock_irqrestore(&port->rx_lock, flags);
 		return;
 	}
-	spin_unlock_irqrestore(&port->tx_lock, flags);
 
 	/* queue out requests */
 	ghsic_data_start_rx(port);
@@ -642,6 +679,9 @@ static int ghsic_data_remove(struct platform_device *pdev)
 	ep_out = port->out;
 	if (ep_out)
 		usb_ep_fifo_flush(ep_out);
+
+	/* cancel pending writes to MDM */
+	cancel_work_sync(&port->write_tomdm_w);
 
 	ghsic_data_free_buffers(port);
 

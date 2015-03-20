@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -151,6 +151,11 @@ enum msm_spi_state {
 #define SPI_QUP_VERSION_NONE      0x0
 #define SPI_QUP_VERSION_BFAM      0x2
 
+#if defined(CONFIG_LGE_BROADCAST_TDMB) || defined(CONFIG_LGE_BROADCAST_ONESEG)
+/* Improvement SPI latency */
+/*                              */ /*                              */
+#endif /*                      */
+
 static char const * const spi_rsrcs[] = {
 	"spi_clk",
 	"spi_miso",
@@ -241,11 +246,22 @@ struct msm_spi {
 	struct list_head         queue;
 	struct workqueue_struct *workqueue;
 	struct work_struct       work_data;
+/*                        */
+#ifdef SPI_LGE_THREAD_FEATURE
+	struct task_struct       *thread;
+#endif /*                        */
+/*                        */
 	struct spi_message      *cur_msg;
 	struct spi_transfer     *cur_transfer;
 	struct completion        transfer_complete;
 	struct clk              *clk;
 	struct clk              *pclk;
+/*                        */
+#ifdef SPI_LGE_THREAD_FEATURE
+	wait_queue_head_t        spi_isr_wait;
+	u32                      spi_isr_sig; 
+#endif /*                        */
+/*                        */
 	unsigned long            mem_phys_addr;
 	size_t                   mem_size;
 	int                      input_fifo_size;
@@ -283,7 +299,8 @@ struct msm_spi {
 	struct msm_dmov_cmd      rx_hdr;
 	int                      input_block_size;
 	int                      output_block_size;
-	int                      burst_size;
+	int                      input_burst_size;
+	int                      output_burst_size;
 	atomic_t                 rx_irq_called;
 	atomic_t                 tx_irq_called;
 	/* Used to pad messages unaligned to block size */
@@ -291,7 +308,8 @@ struct msm_spi {
 	dma_addr_t               tx_padding_dma;
 	u8                       *rx_padding;
 	dma_addr_t               rx_padding_dma;
-	u32                      unaligned_len;
+	u32                      tx_unaligned_len;
+	u32                      rx_unaligned_len;
 	/* DMA statistics */
 	int                      stat_dmov_tx_err;
 	int                      stat_dmov_rx_err;

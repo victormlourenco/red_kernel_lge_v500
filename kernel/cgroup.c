@@ -2116,7 +2116,6 @@ static int cgroup_attach_proc(struct cgroup *cgrp, struct task_struct *leader)
 	/*
 	 * step 5: success! and cleanup
 	 */
-	synchronize_rcu();
 	cgroup_wakeup_rmdir_waiter(cgrp);
 	retval = 0;
 out_put_css_set_refs:
@@ -3967,7 +3966,7 @@ static int cgroup_css_sets_empty(struct cgroup *cgrp)
 	read_lock(&css_set_lock);
 	list_for_each_entry(link, &cgrp->css_sets, cgrp_link_list) {
 		struct css_set *cg = link->cg;
-		if (atomic_read(&cg->refcount) > 0) {
+		if (cg && atomic_read(&cg->refcount) > 0) {
 			retval = 0;
 			break;
 		}

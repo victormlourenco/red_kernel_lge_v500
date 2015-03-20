@@ -52,7 +52,7 @@
 #define HSD_DEBUG_PRINT
 
 #ifdef HSD_DEBUG_PRINT
-#define HSD_DBG(fmt, args...) printk(KERN_DEBUG "%s: " fmt, __func__, ##args)
+#define HSD_DBG(fmt, args...) printk(KERN_ERR "%s: " fmt, __func__, ##args)
 #else
 #define HSD_DBG(fmt, args...) do {} while (0)
 #endif
@@ -353,7 +353,7 @@ static int hsd_gpio_init(struct hsd_info *hi)
 	/* initialize gpio_detect */
 	ret = gpio_request_one(hi->gpio_detect, GPIOF_IN, "gpio_detect");
 	if (ret < 0) {
-		pr_err("%s: Failed to gpio_request gpio%d (gpio_detect)\n",
+		pr_err("%s: Failed to gpio_request gpio %d (gpio_detect)\n",
 				__func__, hi->gpio_detect);
 		goto error_01;
 	}
@@ -361,7 +361,7 @@ static int hsd_gpio_init(struct hsd_info *hi)
 	/* initialize gpio_jpole */
 	ret = gpio_request_one(hi->gpio_jpole, GPIOF_IN, "gpio_jpole");
 	if (ret < 0) {
-		pr_err("%s: Failed to gpio_request gpio%d (gpio_jpole)\n",
+		pr_err("%s: Failed to gpio_request gpio %d (gpio_jpole)\n",
 				__func__, hi->gpio_jpole);
 		goto error_02;
 	}
@@ -369,7 +369,7 @@ static int hsd_gpio_init(struct hsd_info *hi)
 	/* initialize gpio_key */
 	ret = gpio_request_one(hi->gpio_key, GPIOF_IN, "gpio_key");
 	if (ret < 0) {
-		pr_err("%s: Failed to gpio_request gpio%d (gpio_key)\n",
+		pr_err("%s: Failed to gpio_request gpio %d (gpio_key)\n",
 				__func__, hi->gpio_key);
 		goto error_03;
 	}
@@ -378,7 +378,7 @@ static int hsd_gpio_init(struct hsd_info *hi)
 	ret = gpio_request_one(hi->gpio_mic_en, GPIOF_OUT_INIT_LOW,
 			"gpio_mic_en");
 	if (ret < 0) {
-		pr_err("%s: Failed to gpio_request gpio%d (gpio_mic_en)\n",
+		pr_err("%s: Failed to gpio_request gpio %d (gpio_mic_en)\n",
 				__func__, hi->gpio_mic_en);
 		goto error_04;
 	}
@@ -425,7 +425,7 @@ static int hsd_probe(struct platform_device *pdev)
 	struct fsa8008_platform_data *pdata = pdev->dev.platform_data;
 	struct hsd_info *hi;
 
-	pr_info("fsa8008 probe\n");
+	HSD_DBG("hsd_probe");
 
 	if (!pdata) {
 		pr_err("%s: no pdata\n", __func__);
@@ -587,6 +587,8 @@ static int hsd_remove(struct platform_device *pdev)
 {
 	struct hsd_info *hi = (struct hsd_info *)platform_get_drvdata(pdev);
 
+	HSD_DBG("hsd_remove");
+
 	if (switch_get_state(&hi->sdev))
 		remove_headset(hi);
 
@@ -609,6 +611,8 @@ static int hsd_suspend(struct device *dev)
 	struct platform_device *pdev = to_platform_device(dev);
 	struct hsd_info *hi = platform_get_drvdata(pdev);
 
+	HSD_DBG("hsd_suspend");
+
 	if (!hi->gpio_detect_can_wakeup) {
 		disable_irq(hi->irq_detect);
 		hi->saved_detect = gpio_get_value(hi->gpio_detect);
@@ -623,6 +627,8 @@ static int hsd_resume(struct device *dev)
 	struct platform_device *pdev = to_platform_device(dev);
 	struct hsd_info *hi = platform_get_drvdata(pdev);
 	int detect = 0;
+
+	HSD_DBG("hsd_resume");
 
 	detect = gpio_get_value(hi->gpio_detect);
 	if (HEADSET_INSERT == detect)
@@ -656,41 +662,39 @@ static int __init hsd_init(void)
 {
 	int ret;
 
-	pr_info("fsa8008 init\n");
-
-	wake_lock_init(&ear_hook_wake_lock, WAKE_LOCK_SUSPEND, "ear_hook");
+	HSD_DBG("hsd_init");
 
 #ifdef FSA8008_USE_WORK_QUEUE
 	local_fsa8008_workqueue = create_workqueue("fsa8008");
 	if (!local_fsa8008_workqueue) {
 		pr_err("%s: out of memory\n", __func__);
-		ret = -ENOMEM;
-		goto err_workqueue;
+		return -ENOMEM;
 	}
 #endif
 
 	ret = platform_driver_register(&hsd_driver);
-	if (ret < 0) {
+	if (ret< 0) {
 		pr_err("%s: Fail to register platform driver\n", __func__);
-		goto err_platform_driver_register;
+		goto err;
 	}
 
-	return 0;
+	wake_lock_init(&ear_hook_wake_lock, WAKE_LOCK_SUSPEND, "ear_hook");
 
-err_platform_driver_register:
+	return ret;
+
+err:
 #ifdef FSA8008_USE_WORK_QUEUE
 	if (local_fsa8008_workqueue)
 		destroy_workqueue(local_fsa8008_workqueue);
 	local_fsa8008_workqueue = NULL;
 #endif
-err_workqueue:
-	wake_lock_destroy(&ear_hook_wake_lock);
-
 	return ret;
 }
 
 static void __exit hsd_exit(void)
 {
+	HSD_DBG("hsd_exit");
+
 #ifdef FSA8008_USE_WORK_QUEUE
 	if (local_fsa8008_workqueue)
 		destroy_workqueue(local_fsa8008_workqueue);

@@ -79,9 +79,13 @@
  * next layer of buffering.  For TX that's a circular buffer; for RX
  * consider it a NOP.  A third layer is provided by the TTY code.
  */
-#define TX_QUEUE_SIZE		8
+#define TX_QUEUE_SIZE		16
 #define TX_BUF_SIZE		4096
+#ifdef CONFIG_USB_G_LGE_ANDROID
 #define WRITE_BUF_SIZE		(8192+1)		/* TX only */
+#else
+#define WRITE_BUF_SIZE		8192		/* TX only */
+#endif
 
 #define RX_QUEUE_SIZE		8
 #define RX_BUF_SIZE		4096
@@ -393,7 +397,9 @@ __acquires(&port->port_lock)
 			if (prev_len && (prev_len % in->maxpacket == 0)) {
 				req->length = 0;
 				list_del(&req->list);
+#ifdef CONFIG_USB_G_LGE_ANDROID
 				port->write_started++;
+#endif
 				spin_unlock(&port->port_lock);
 				status = usb_ep_queue(in, req, GFP_ATOMIC);
 				spin_lock(&port->port_lock);
@@ -405,7 +411,9 @@ __acquires(&port->port_lock)
 					printk(KERN_ERR "%s: %s err %d\n",
 					__func__, "queue", status);
 					list_add(&req->list, pool);
+#ifdef CONFIG_USB_G_LGE_ANDROID
 					port->write_started--;
+#endif
 				}
 				prev_len = 0;
 			}
@@ -416,7 +424,9 @@ __acquires(&port->port_lock)
 
 		req->length = len;
 		list_del(&req->list);
+#ifdef CONFIG_USB_G_LGE_ANDROID
 		port->write_started++;
+#endif
 
 		pr_vdebug(PREFIX "%d: tx len=%d, 0x%02x 0x%02x 0x%02x ...\n",
 				port->port_num, len, *((u8 *)req->buf),
@@ -446,13 +456,13 @@ __acquires(&port->port_lock)
 			pr_debug("%s: %s %s err %d\n",
 					__func__, "queue", in->name, status);
 			list_add(&req->list, pool);
+#ifdef CONFIG_USB_G_LGE_ANDROID
 			port->write_started--;
+#endif
 			break;
 		}
 		prev_len = req->length;
 		port->nbytes_from_tty += req->length;
-
-		port->write_started++;
 
 	}
 
@@ -1008,6 +1018,10 @@ static void gs_flush_chars(struct tty_struct *tty)
 	struct gs_port	*port = tty->driver_data;
 	unsigned long	flags;
 
+#ifdef CONFIG_USB_G_LGE_ANDROID
+	if(!port)
+		return;
+#endif
 	pr_vdebug("gs_flush_chars: (%d,%p)\n", port->port_num, tty);
 
 	spin_lock_irqsave(&port->port_lock, flags);
@@ -1022,6 +1036,10 @@ static int gs_write_room(struct tty_struct *tty)
 	unsigned long	flags;
 	int		room = 0;
 
+#ifdef CONFIG_USB_G_LGE_ANDROID
+	if(!port)
+		return room;
+#endif
 	spin_lock_irqsave(&port->port_lock, flags);
 	if (port->port_usb)
 		room = gs_buf_space_avail(&port->port_write_buf);
@@ -1054,6 +1072,13 @@ static void gs_unthrottle(struct tty_struct *tty)
 {
 	struct gs_port		*port = tty->driver_data;
 	unsigned long		flags;
+
+	/*
+	 * tty's driver data is set to NULL during port close.  Nothing
+	 * to do here.
+	 */
+	if (!port)
+		return;
 
 	spin_lock_irqsave(&port->port_lock, flags);
 	if (port->port_usb) {
@@ -1310,7 +1335,8 @@ static void usb_debugfs_init(struct gs_port *ui_dev, int port_num)
 		return;
 
 	debugfs_create_file("readstatus", 0444, dent, ui_dev, &debug_adb_ops);
-	debugfs_create_file("reset", 0222, dent, ui_dev, &debug_rst_ops);
+	debugfs_create_file("reset", S_IRUGO | S_IWUSR,
+			dent, ui_dev, &debug_rst_ops);
 }
 #else
 static void usb_debugfs_init(struct gs_port *ui_dev) {}
@@ -1394,6 +1420,7 @@ int gserial_setup(struct usb_gadget *g, unsigned count)
 	/* export the driver ... */
 	status = tty_register_driver(gs_tty_driver);
 	if (status) {
+		put_tty_driver(gs_tty_driver);
 		pr_err("%s: cannot register, err %d\n",
 				__func__, status);
 		goto fail;

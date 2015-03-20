@@ -114,7 +114,6 @@
 #include <linux/mount.h>
 #include <net/checksum.h>
 #include <linux/security.h>
-#include <linux/freezer.h>
 
 struct hlist_head unix_socket_table[UNIX_HASH_SIZE + 1];
 EXPORT_SYMBOL_GPL(unix_socket_table);
@@ -1875,7 +1874,7 @@ static long unix_stream_data_wait(struct sock *sk, long timeo)
 
 		set_bit(SOCK_ASYNC_WAITDATA, &sk->sk_socket->flags);
 		unix_state_unlock(sk);
-		timeo = freezable_schedule_timeout(timeo);
+		timeo = schedule_timeout(timeo);
 		unix_state_lock(sk);
 		clear_bit(SOCK_ASYNC_WAITDATA, &sk->sk_socket->flags);
 	}
@@ -2380,7 +2379,7 @@ static int __net_init unix_net_init(struct net *net)
 {
 	int error = -ENOMEM;
 
-	net->unx.sysctl_max_dgram_qlen = 10;
+	net->unx.sysctl_max_dgram_qlen = 300;
 	if (unix_sysctl_register(net))
 		goto out;
 
