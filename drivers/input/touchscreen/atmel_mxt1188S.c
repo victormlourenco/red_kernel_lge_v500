@@ -2297,7 +2297,12 @@ static void mxt_proc_t24_messages(struct mxt_data *data, u8 *message)
 #endif
 			wake_lock_timeout(&touch_wake_lock, msecs_to_jiffies(2000));
 			dev_err(&data->client->dev,"Knock On detected x[%3d] y[%3d] \n", x, y);
-			kobject_uevent_env(&lge_touch_sys_device.kobj, KOBJ_CHANGE, knockon_event);
+               input_report_key(data->input_dev, KEY_POWER, true);
+               input_sync(data->input_dev);
+               input_report_key(data->input_dev, KEY_POWER, false);
+               input_sync(data->input_dev);
+
+	//		kobject_uevent_env(&lge_touch_sys_device.kobj, KOBJ_CHANGE, knockon_event);
 #ifdef CONFIG_TOUCHSCREEN_LGE_LPWG
 		}
 #endif
