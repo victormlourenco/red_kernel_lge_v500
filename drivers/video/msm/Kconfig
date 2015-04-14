@@ -113,11 +113,6 @@ config FB_MSM_MIPI_DSI
 	bool
 	default n
 
-config FB_MSM_LCD_NOTIFY
-	depends on FB_MSM_MIPI_DSI_LGIT_WUXGA
-	bool "Simple LCD power on/off wrapper"
-	default n
-
 config FB_MSM_LCDC
 	bool
 	default n
