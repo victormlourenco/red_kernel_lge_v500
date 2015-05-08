@@ -37,9 +37,18 @@
 #include <linux/sched.h>
 #include <linux/rcupdate.h>
 #include <linux/notifier.h>
-#include <linux/swap.h>
 #include <linux/mutex.h>
 #include <linux/delay.h>
+#include <linux/fs.h>
+#include <linux/cpuset.h>
+#include <linux/swap.h>
+#include <linux/fs.h>
+
+#ifdef CONFIG_HIGHMEM
+#define _ZONE ZONE_HIGHMEM
+#else
+#define _ZONE ZONE_NORMAL
+#endif
 
 static uint32_t lowmem_debug_level = 1;
 static int lowmem_adj[6] = {
@@ -82,6 +91,8 @@ static int test_task_flag(struct task_struct *p, int flag)
 	return 0;
 }
 
+static DEFINE_MUTEX(scan_mutex);
+
 int can_use_cma_pages(gfp_t gfp_mask)
 {
 	int can_use = 0;
@@ -107,7 +118,6 @@ int can_use_cma_pages(gfp_t gfp_mask)
 	return can_use;
 }
 
-
 void tune_lmk_zone_param(struct zonelist *zonelist, int classzone_idx,
 					int *other_free, int *other_file,
 					int use_cma_pages)
@@ -117,7 +127,8 @@ void tune_lmk_zone_param(struct zonelist *zonelist, int classzone_idx,
 	int zone_idx;
 
 	for_each_zone_zonelist(zone, zoneref, zonelist, MAX_NR_ZONES) {
-		if ((zone_idx = zonelist_zone_idx(zoneref)) == ZONE_MOVABLE) {
+		zone_idx = zonelist_zone_idx(zoneref);
+		if (zone_idx == ZONE_MOVABLE) {
 			if (!use_cma_pages)
 				*other_free -=
 				    zone_page_state(zone, NR_FREE_CMA_PAGES);
@@ -215,17 +226,17 @@ void tune_lmk_param(int *other_free, int *other_file, struct shrink_control *sc)
 			tune_lmk_zone_param(zonelist, classzone_idx, other_free,
 				       NULL, use_cma_pages);
 
-		if (zone_watermark_ok(preferred_zone, 0, 0, ZONE_HIGHMEM, 0)) {
+		if (zone_watermark_ok(preferred_zone, 0, 0, _ZONE, 0)) {
 			if (!use_cma_pages) {
 				*other_free -= min(
-				  preferred_zone->lowmem_reserve[ZONE_HIGHMEM]
+				  preferred_zone->lowmem_reserve[_ZONE]
 				  + zone_page_state(
 				    preferred_zone, NR_FREE_CMA_PAGES),
 				  zone_page_state(
 				    preferred_zone, NR_FREE_PAGES));
 			} else {
 				*other_free -=
-				  preferred_zone->lowmem_reserve[ZONE_HIGHMEM];
+				  preferred_zone->lowmem_reserve[_ZONE];
 			}
 		} else {
 			*other_free -= zone_page_state(preferred_zone,
@@ -248,8 +259,6 @@ void tune_lmk_param(int *other_free, int *other_file, struct shrink_control *sc)
 	}
 }
 
-static DEFINE_MUTEX(scan_mutex);
-
 static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 {
 	struct task_struct *tsk;
@@ -258,6 +267,7 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	int tasksize;
 	int i;
 	int min_score_adj = OOM_SCORE_ADJ_MAX + 1;
+	int minfree = 0;
 	int selected_tasksize = 0;
 	int selected_oom_score_adj;
 	int array_size = ARRAY_SIZE(lowmem_adj);
@@ -271,8 +281,14 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	}
 
 	other_free = global_page_state(NR_FREE_PAGES);
-	other_file = global_page_state(NR_FILE_PAGES) -
-						global_page_state(NR_SHMEM);
+
+	if (global_page_state(NR_SHMEM) + total_swapcache_pages <
+		global_page_state(NR_FILE_PAGES))
+		other_file = global_page_state(NR_FILE_PAGES) -
+						global_page_state(NR_SHMEM) -
+						total_swapcache_pages;
+	else
+		other_file = 0;
 
 	tune_lmk_param(&other_free, &other_file, sc);
 
@@ -281,8 +297,8 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	if (lowmem_minfree_size < array_size)
 		array_size = lowmem_minfree_size;
 	for (i = 0; i < array_size; i++) {
-		if (other_free < lowmem_minfree[i] &&
-		    other_file < lowmem_minfree[i]) {
+		minfree = lowmem_minfree[i];
+		if (other_free < minfree && other_file < minfree) {
 			min_score_adj = lowmem_adj[i];
 			break;
 		}
@@ -351,13 +367,41 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 		selected = p;
 		selected_tasksize = tasksize;
 		selected_oom_score_adj = oom_score_adj;
-		lowmem_print(2, "select %d (%s), adj %d, size %d, to kill\n",
-			     p->pid, p->comm, oom_score_adj, tasksize);
+		lowmem_print(3, "select '%s' (%d), adj %hd, size %d, to kill\n",
+			     p->comm, p->pid, oom_score_adj, tasksize);
 	}
 	if (selected) {
-		lowmem_print(1, "send sigkill to %d (%s), adj %d, size %d\n",
-			     selected->pid, selected->comm,
-			     selected_oom_score_adj, selected_tasksize);
+		lowmem_print(1, "Killing '%s' (%d), adj %hd,\n" \
+				"   to free %ldkB on behalf of '%s' (%d) because\n" \
+				"   cache %ldkB is below limit %ldkB for oom_score_adj %hd\n" \
+				"   Free memory is %ldkB above reserved.\n" \
+				"   Free CMA is %ldkB\n" \
+				"   Total reserve is %ldkB\n" \
+				"   Total free pages is %ldkB\n" \
+				"   Total file cache is %ldkB\n" \
+				"   GFP mask is 0x%x\n",
+			     selected->comm, selected->pid,
+			     selected_oom_score_adj,
+			     selected_tasksize * (long)(PAGE_SIZE / 1024),
+			     current->comm, current->pid,
+			     other_file * (long)(PAGE_SIZE / 1024),
+			     minfree * (long)(PAGE_SIZE / 1024),
+			     min_score_adj,
+			     other_free * (long)(PAGE_SIZE / 1024),
+			     global_page_state(NR_FREE_CMA_PAGES) *
+				(long)(PAGE_SIZE / 1024),
+			     totalreserve_pages * (long)(PAGE_SIZE / 1024),
+			     global_page_state(NR_FREE_PAGES) *
+				(long)(PAGE_SIZE / 1024),
+			     global_page_state(NR_FILE_PAGES) *
+				(long)(PAGE_SIZE / 1024),
+			     sc->gfp_mask);
+
+		if (lowmem_debug_level >= 2 && selected_oom_score_adj == 0) {
+			show_mem(SHOW_MEM_FILTER_NODES);
+			dump_tasks(NULL, NULL);
+		}
+
 		lowmem_deathpending_timeout = jiffies + HZ;
 		send_sig(SIGKILL, selected, 0);
 		set_tsk_thread_flag(selected, TIF_MEMDIE);
