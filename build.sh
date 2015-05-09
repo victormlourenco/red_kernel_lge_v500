@@ -4,11 +4,11 @@ fi
  
 make ARCH=arm CROSS_COMPILE=/home/victor/uber/scripts/out/arm-linux-androideabi-4.9-cortex-a15/bin/arm-linux-androideabi- zImage -j6
  
-cp arch/arm/boot/zImage ~/anykernel/
+cp arch/arm/boot/zImage ~/anykernel-aosp/
  
-cd ~/anykernel/
+cd ~/anykernel-aosp/
  
-zipfile="RedKernel-rXXX.zip"
+zipfile="RedKernel-rXXX-AOSP.zip"
 echo "making zip file"
 cp zImage zip/kernel/
  
