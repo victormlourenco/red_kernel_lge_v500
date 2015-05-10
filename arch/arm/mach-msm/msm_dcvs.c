@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -146,7 +146,7 @@ static struct dcvs_core core_list[CORES_MAX];
 
 static struct kobject *cores_kobj;
 
-#define DCVS_MAX_NUM_FREQS 15
+#define DCVS_MAX_NUM_FREQS 18
 static struct msm_dcvs_freq_entry cpu_freq_tbl[DCVS_MAX_NUM_FREQS];
 static unsigned num_cpu_freqs;
 static struct msm_dcvs_platform_data *dcvs_pdata;
@@ -1026,9 +1026,6 @@ int msm_dcvs_register_core(
 	uint32_t ret1;
 	uint32_t ret2;
 
-	if (!msm_dcvs_enabled)
-		return ret;
-
 	offset = get_core_offset(type, type_core_num);
 	if (offset < 0)
 		return ret;
@@ -1254,7 +1251,9 @@ int msm_dcvs_idle(int dcvs_core_id, enum msm_core_idle_state state,
 		if (ret < 0 && ret != -13)
 			__err("Error (%d) sending idle enter for %s\n",
 					ret, core->core_name);
+#if 0
 		trace_msm_dcvs_idle("idle_enter_exit", core->core_name, 1);
+#endif
 		break;
 
 	case MSM_DCVS_IDLE_EXIT:
@@ -1264,10 +1263,12 @@ int msm_dcvs_idle(int dcvs_core_id, enum msm_core_idle_state state,
 			__err("Error (%d) sending idle exit for %s\n",
 					ret, core->core_name);
 		start_slack_timer(core, timer_interval_us);
+#if 0
 		trace_msm_dcvs_idle("idle_enter_exit", core->core_name, 0);
 		trace_msm_dcvs_iowait("iowait", core->core_name, iowaited);
 		trace_msm_dcvs_slack_time("slack_timer_dcvs", core->core_name,
 							timer_interval_us);
+#endif
 		break;
 	}
 
@@ -1279,9 +1280,6 @@ static int __init msm_dcvs_late_init(void)
 {
 	struct kobject *module_kobj = NULL;
 	int ret = 0;
-
-	if (!msm_dcvs_enabled)
-		return ret;
 
 	module_kobj = kset_find_obj(module_kset, KBUILD_MODNAME);
 	if (!module_kobj) {
@@ -1349,7 +1347,6 @@ static int __init msm_dcvs_early_init(void)
 	ret = msm_dcvs_scm_init(SZ_32K);
 	if (ret) {
 		__err("Unable to initialize DCVS err=%d\n", ret);
-		msm_dcvs_enabled = 0;
 		goto done;
 	}
 

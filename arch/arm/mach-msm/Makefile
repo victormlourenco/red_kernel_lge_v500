@@ -51,7 +51,7 @@ ifdef CONFIG_ARCH_MSM8625
 else
 	obj-$(CONFIG_SMP) += platsmp.o
 endif
-obj-$(CONFIG_HOTPLUG_CPU) += hotplug.o dyn_hotplug.o
+obj-$(CONFIG_HOTPLUG_CPU) += hotplug.o
 
 obj-$(CONFIG_MSM_AVS_HW) += avs.o
 obj-$(CONFIG_CPU_V6) += idle-v6.o
@@ -401,6 +401,8 @@ ifdef CONFIG_MSM_CPR
 obj-$(CONFIG_DEBUG_FS) += msm_cpr-debug.o
 endif
 obj-$(CONFIG_MSM_CPU_PWRCTL) +=  msm_cpu_pwrctl.o
+
+obj-$(CONFIG_MSM_MPDEC) += msm_mpdecision.o
 
 obj-$(CONFIG_CPU_FREQ_MSM) += cpufreq.o
 
