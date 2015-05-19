@@ -977,5 +977,20 @@ config TOUCHSCREEN_CHARGER_NOTIFY
 	  The touch firmware will use this information to decide whether
 	  a new algorithm to reduce the noise impact needs to be applied
 	  or not.
+
+config TOUCHSCREEN_ATMEL_MXT1188S
+	tristate "Atmel maXT1188S based touchscreens"
+	depends on I2C
+	default n
+	help
+	Say Y here if you have an Atmel Maxtouch based touchscreen.
+
+config TOUCHSCREEN_ATMEL_KNOCK_ON
+        tristate "Knock on feature for Atmel MXT based touchscreens"
+        depends on I2C
+        default n
+        help
+        Say Y here if you want to enable knock-on feature for Atmel
+		Maxtouch based touchscreen.
 endif
 

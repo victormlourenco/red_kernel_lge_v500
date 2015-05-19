@@ -479,11 +479,6 @@ static void vpe_send_outmsg(void)
 		return;
 	}
 	event_qcmd = kzalloc(sizeof(struct msm_queue_cmd), GFP_ATOMIC);
-	if (!event_qcmd) {
-		pr_err("%s: out of memory\n", __func__);
-		spin_unlock_irqrestore(&vpe_ctrl->lock, flags);
-		return;
-	}
 	atomic_set(&event_qcmd->on_heap, 1);
 	event_qcmd->command = (void *)vpe_ctrl->pp_frame_info;
 	vpe_ctrl->pp_frame_info = NULL;
@@ -510,6 +505,8 @@ DECLARE_TASKLET(vpe_tasklet, vpe_do_tasklet, 0);
 
 static irqreturn_t vpe_parse_irq(int irq_num, void *data)
 {
+	if(!vpe_ctrl || !vpe_ctrl->vpebase)
+		return IRQ_HANDLED;
 	vpe_ctrl->irq_status = msm_camera_io_r_mb(vpe_ctrl->vpebase +
 							VPE_INTR_STATUS_OFFSET);
 	msm_camera_io_w_mb(vpe_ctrl->irq_status, vpe_ctrl->vpebase +
@@ -555,6 +552,14 @@ int vpe_enable(uint32_t clk_rate, struct msm_cam_media_controller *mctl)
 		goto vpe_clk_failed;
 
 #ifdef CONFIG_MSM_IOMMU
+/*                                                                                                   */
+	if (mctl->domain == NULL) {
+		pr_err("%s: iommu domain not initialized\n", __func__);
+		rc = -EINVAL;
+		goto src_attach_failed;
+	}
+/*                                                                                                   */
+
 	rc = iommu_attach_device(mctl->domain, vpe_ctrl->iommu_ctx_src);
 	if (rc < 0) {
 		pr_err("%s: Device attach failed\n", __func__);
@@ -565,6 +570,13 @@ int vpe_enable(uint32_t clk_rate, struct msm_cam_media_controller *mctl)
 		pr_err("%s: Device attach failed\n", __func__);
 		goto dst_attach_failed;
 	}
+/*                                                                  */
+#if defined(CONFIG_MACH_APQ8064_PALMAN)
+#ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
+	msm_camera_v4l2_get_ion_client(mctl->pcam_ptr);
+#endif
+#endif
+/*                                                                */
 #endif
 	return rc;
 
@@ -599,6 +611,13 @@ int vpe_disable(struct msm_cam_media_controller *mctl)
 #ifdef CONFIG_MSM_IOMMU
 	iommu_detach_device(mctl->domain, vpe_ctrl->iommu_ctx_dst);
 	iommu_detach_device(mctl->domain, vpe_ctrl->iommu_ctx_src);
+/*                                                                  */
+#if defined(CONFIG_MACH_APQ8064_PALMAN)
+#ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
+	msm_camera_v4l2_put_ion_client(mctl->pcam_ptr);
+#endif
+#endif	
+/*                                                                */
 #endif
 	disable_irq(vpe_ctrl->vpeirq->start);
 	tasklet_kill(&vpe_tasklet);
@@ -949,8 +968,7 @@ static long msm_vpe_subdev_ioctl(struct v4l2_subdev *sd,
 			pr_err("%s PAYLOAD Copy to user failed ", __func__);
 
 		kfree(pp_frame_info);
-		event_qcmd->command = NULL;
-		free_qcmd(event_qcmd);
+		kfree(event_qcmd);
 		break;
 		}
 
@@ -1018,8 +1036,12 @@ static int msm_vpe_subdev_close(struct v4l2_subdev *sd,
 			frame_info->p_mctl->client, mctl->domain_num);
 		msm_mctl_unmap_user_frame(&frame_info->dest_frame,
 			frame_info->p_mctl->client, mctl->domain_num);
+//                                                                               
+// Because of this, getting VT during the video capture always goes to Kernel Crash.
+		kfree(frame_info);
+		vpe_ctrl->pp_frame_info = NULL;
+//                                                                               
 	}
-	vpe_ctrl->pp_frame_info = NULL;
 	/* Drain the payload queue. */
 	msm_queue_drain(&vpe_ctrl->eventData_q, list_eventdata);
 	atomic_dec(&vpe_ctrl->active);

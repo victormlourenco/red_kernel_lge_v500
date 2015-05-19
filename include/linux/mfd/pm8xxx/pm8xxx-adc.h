@@ -104,6 +104,7 @@ enum pm8xxx_adc_channels {
 #define PM8XXX_CHANNEL_MPP_SCALE1_IDX	20
 #define PM8XXX_CHANNEL_MPP_SCALE3_IDX	40
 
+#define PM8XXX_AMUX_MPP_1	0x1
 #define PM8XXX_AMUX_MPP_3	0x3
 #define PM8XXX_AMUX_MPP_4	0x4
 #define PM8XXX_AMUX_MPP_5	0x5
@@ -111,6 +112,7 @@ enum pm8xxx_adc_channels {
 #define PM8XXX_AMUX_MPP_7	0x7
 #define PM8XXX_AMUX_MPP_8	0x8
 
+#define PM8XXX_AMUX_MPP_12	0xC
 #define PM8XXX_ADC_DEV_NAME	"pm8xxx-adc"
 
 /**
@@ -216,6 +218,9 @@ enum pm8xxx_adc_scale_fn_type {
 	ADC_SCALE_PA_THERM,
 	ADC_SCALE_PMIC_THERM,
 	ADC_SCALE_XOTHERM,
+#ifdef CONFIG_MACH_APQ8064_PALMAN
+	ADC_SCALE_APQ_THERM,
+#endif
 	ADC_SCALE_NONE,
 };
 
@@ -378,6 +383,23 @@ int32_t pm8xxx_adc_scale_pa_therm(int32_t adc_code,
 			const struct pm8xxx_adc_properties *adc_prop,
 			const struct pm8xxx_adc_chan_properties *chan_prop,
 			struct pm8xxx_adc_chan_result *chan_rslt);
+#ifdef CONFIG_MACH_APQ8064_PALMAN
+/**
+ * pm8xxx_adc_scale_apq_therm() - Scales the pre-calibrated digital output
+ *              of an ADC to the ADC reference and compensates for the
+ *              gain and offset. Returns the temperature in degC.
+ * @adc_code:   pre-calibrated digital ouput of the ADC.
+ * @adc_prop:   adc properties of the pm8xxx adc such as bit resolution,
+ *              reference voltage.
+ * @chan_prop:  individual channel properties to compensate the i/p scaling,
+ *              slope and offset.
+ * @chan_rslt:  physical result to be stored.
+ */
+int32_t pm8xxx_adc_scale_apq_therm(int32_t adc_code,
+			const struct pm8xxx_adc_properties *adc_prop,
+			const struct pm8xxx_adc_chan_properties *chan_prop,
+			struct pm8xxx_adc_chan_result *chan_rslt);
+#endif
 /**
  * pm8xxx_adc_scale_pmic_therm() - Scales the pre-calibrated digital output
  *		of an ADC to the ADC reference and compensates for the
@@ -518,6 +540,9 @@ struct pm8xxx_adc_platform_data {
 	struct pm8xxx_adc_amux		*adc_channel;
 	uint32_t			adc_num_board_channel;
 	uint32_t			adc_mpp_base;
+#ifdef CONFIG_MACH_APQ8064_PALMAN
+	bool				apq_therm;
+#endif
 };
 
 /* Public API */

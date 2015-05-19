@@ -117,7 +117,10 @@ static int msm_fb_ioctl(struct fb_info *info, unsigned int cmd,
 static int msm_fb_mmap(struct fb_info *info, struct vm_area_struct * vma);
 static int mdp_bl_scale_config(struct msm_fb_data_type *mfd,
 						struct mdp_bl_scale_data *data);
+#ifdef CONFIG_BACKLIGHT_I2C_BL
+#else /* QCT original */
 static void msm_fb_scale_bl(__u32 *bl_lvl);
+#endif
 static void msm_fb_commit_wq_handler(struct work_struct *work);
 static int msm_fb_pan_idle(struct msm_fb_data_type *mfd);
 
@@ -192,6 +195,9 @@ static void msm_fb_set_bl_brightness(struct led_classdev *led_cdev,
 	struct msm_fb_data_type *mfd = dev_get_drvdata(led_cdev->dev->parent);
 	int bl_lvl;
 
+#ifdef CONFIG_BACKLIGHT_I2C_BL
+	bl_lvl = value;
+#else /* QCT original */
 	/* This maps android backlight level 1 to 255 into
 	   driver backlight level bl_min to bl_max with rounding
 	   and maps backlight level 0 to 0. */
@@ -204,7 +210,7 @@ static void msm_fb_set_bl_brightness(struct led_classdev *led_cdev,
 			(mfd->panel_info.bl_max - mfd->panel_info.bl_min) +
 			MAX_BACKLIGHT_BRIGHTNESS - 1) /
 			(MAX_BACKLIGHT_BRIGHTNESS - 1) / 2;
-
+#endif
 	down(&mfd->sem);
 	msm_fb_set_backlight(mfd, bl_lvl);
 	up(&mfd->sem);
@@ -352,12 +358,109 @@ static ssize_t msm_fb_msm_fb_type(struct device *dev,
 	return ret;
 }
 
+extern unsigned int lcd_color_preset_lut[];
+static ssize_t msm_fb_show_lut_map(struct device *dev,
+				  struct device_attribute *attr, char *buf)
+{
+	int i = 0;
+	int j = 0;
+
+	buf[0] = '{';
+
+	for (i = 0, j = 2; i < 256 && j < PAGE_SIZE; i++) {
+		if (!(i % 4))
+			buf[j++] = '\n';
+		if (lcd_color_preset_lut[i] < 0xFFFFF)
+			sprintf(&buf[j], "0x000%5X,", lcd_color_preset_lut[i]);
+		else
+			sprintf(&buf[j], "0x00%6X,", lcd_color_preset_lut[i]);
+		j += 12;
+	}
+	buf[j++] = '\n';
+	buf[j++] = '}';
+	buf[j++] = '\n';
+
+	return j;
+}
+static ssize_t msm_fb_store_lut_map(struct device *dev,
+				  struct device_attribute *attr, const char *buf, size_t count)
+{
+	char* tempbuf;
+	char* tok_buf;
+	int entry_num;
+	unsigned int entry_value;
+	int i = 0;
+	int max_cnt = 2;
+
+	if (count < 1)
+		return count;
+
+	tempbuf = kmalloc(count * sizeof(char), GFP_KERNEL);
+	memcpy(tempbuf, buf, count);
+	tempbuf[count - 1] = '\n';
+
+	tok_buf = strsep(&tempbuf, ",");
+
+	while(tok_buf != NULL) {
+		i++;
+		if (i > max_cnt)
+			break;
+		if (i == 1)
+			sscanf(tok_buf, "%d", &entry_num);
+		else
+			sscanf(tok_buf, "%x", &entry_value);
+		tok_buf = strsep(&tempbuf, ",");
+	}
+
+	lcd_color_preset_lut[entry_num] = entry_value;
+
+	if (msm_fb_pdata->update_lcdc_lut)
+		msm_fb_pdata->update_lcdc_lut();
+
+	kfree(tok_buf);
+	kfree(tempbuf);
+
+	return count;
+}
+static ssize_t msm_fb_store_lut_map_table(struct device *dev,
+				  struct device_attribute *attr, const char *buf, size_t count)
+{
+	int i, j;
+	unsigned int temp;
+	unsigned int entry_value[256];
+
+	if (count < 0)
+		return count;
+
+	for (i = 1, j = 0; i < count && j < 256; ++i) {
+		if (buf[i] != '\n' && buf[i] != ' ' && buf[i] != '{' && buf[i] != ',') {
+			sscanf(&buf[i+4], "%X", &temp);
+			entry_value[j] = temp;
+			lcd_color_preset_lut[j] = entry_value[j];
+			j++;
+			while (buf[i] != ',')
+				++i;
+		} else
+			i++;
+	}
+
+	if (msm_fb_pdata->update_lcdc_lut)
+		msm_fb_pdata->update_lcdc_lut();
+
+	return count;
+}
+
 static DEVICE_ATTR(msm_fb_type, S_IRUGO, msm_fb_msm_fb_type, NULL);
 static DEVICE_ATTR(msm_fb_fps_level, S_IRUGO | S_IWUSR, NULL, \
 				msm_fb_fps_level_change);
+static DEVICE_ATTR(msm_fb_lut_map, 0644, msm_fb_show_lut_map, msm_fb_store_lut_map);
+static DEVICE_ATTR(msm_fb_lut_map_table, 0644, NULL, msm_fb_store_lut_map_table);
+
 static struct attribute *msm_fb_attrs[] = {
 	&dev_attr_msm_fb_type.attr,
 	&dev_attr_msm_fb_fps_level.attr,
+	&dev_attr_msm_fb_lut_map.attr,
+	&dev_attr_msm_fb_lut_map_table.attr,
 	NULL,
 };
 static struct attribute_group msm_fb_attr_group = {
@@ -666,6 +769,10 @@ static int msm_fb_resume_sub(struct msm_fb_data_type *mfd)
 		if (ret)
 			MSM_FB_INFO("msm_fb_resume: can't turn on display!\n");
 	}
+#ifdef CONFIG_UPDATE_LCDC_LUT
+	if (msm_fb_pdata->update_lcdc_lut)
+		msm_fb_pdata->update_lcdc_lut();
+#endif
 
 	mfd->suspend.op_suspend = false;
 
@@ -907,6 +1014,8 @@ static int mdp_bl_scale_config(struct msm_fb_data_type *mfd,
 	return ret;
 }
 
+#ifdef CONFIG_BACKLIGHT_I2C_BL
+#else /* QCT original */
 static void msm_fb_scale_bl(__u32 *bl_lvl)
 {
 	__u32 temp = *bl_lvl;
@@ -923,6 +1032,7 @@ static void msm_fb_scale_bl(__u32 *bl_lvl)
 
 	(*bl_lvl) = temp;
 }
+#endif
 
 /*must call this function from within mfd->sem*/
 void msm_fb_set_backlight(struct msm_fb_data_type *mfd, __u32 bkl_lvl)
@@ -940,10 +1050,13 @@ void msm_fb_set_backlight(struct msm_fb_data_type *mfd, __u32 bkl_lvl)
 	pdata = (struct msm_fb_panel_data *)mfd->pdev->dev.platform_data;
 
 	if ((pdata) && (pdata->set_backlight)) {
+#ifdef CONFIG_BACKLIGHT_I2C_BL
+#else /* QCT original */
 		msm_fb_scale_bl(&temp);
 		if (bl_level_old == temp) {
 			return;
 		}
+#endif
 		mfd->bl_level = temp;
 		pdata->set_backlight(mfd);
 		mfd->bl_level = bkl_lvl;
@@ -1266,6 +1379,9 @@ static int msm_fb_register(struct msm_fb_data_type *mfd)
 #if defined(CONFIG_FB_MSM_MIPI_LGIT_VIDEO_WXGA_PT)
 	var->height = 102,      /* height of picture in mm */
 	var->width = 61,        /* width of picture in mm */
+#elif defined(CONFIG_FB_MSM_MIPI_LGIT_VIDEO_WUXGA_PT)
+	var->height = 178,      /* height of picture in mm */
+	var->width = 111,       /* width of picture in mm */
 #else
 	var->height = -1,	/* height of picture in mm */
 	var->width = -1,	/* width of picture in mm */

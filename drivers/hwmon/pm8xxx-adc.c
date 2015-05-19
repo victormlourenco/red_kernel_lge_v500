@@ -124,6 +124,12 @@
 #define PM8XXX_ADC_HWMON_NAME_LENGTH			32
 #define PM8XXX_ADC_BTM_INTERVAL_MAX			0x14
 #define PM8XXX_ADC_COMPLETION_TIMEOUT			(2 * HZ)
+#ifdef CONFIG_MACH_APQ8064_PALMAN
+/* Ref patch test */
+#define PM8XXX_ADC_APQ_THERM_VREG_UV_MIN               2220000
+#define PM8XXX_ADC_APQ_THERM_VREG_UV_MAX               2220000
+#define PM8XXX_ADC_APQ_THERM_VREG_UA_LOAD              100000
+#endif
 
 struct pm8xxx_adc {
 	struct device				*dev;
@@ -146,6 +152,9 @@ struct pm8xxx_adc {
 	int					msm_suspend_check;
 	struct pm8xxx_adc_amux_properties	*conv;
 	struct pm8xxx_adc_arb_btm_param		batt;
+#ifdef CONFIG_MACH_APQ8064_PALMAN
+	bool					apq_therm;
+#endif
 	struct sensor_device_attribute		sens_attr[0];
 };
 
@@ -166,6 +175,9 @@ static const struct pm8xxx_adc_scaling_ratio pm8xxx_amux_scaling_ratio[] = {
 
 static struct pm8xxx_adc *pmic_adc;
 static struct regulator *pa_therm;
+#ifdef CONFIG_MACH_APQ8064_PALMAN
+static struct regulator *apq_therm;
+#endif
 
 static struct pm8xxx_adc_scale_fn adc_scale_fn[] = {
 	[ADC_SCALE_DEFAULT] = {pm8xxx_adc_scale_default},
@@ -173,6 +185,9 @@ static struct pm8xxx_adc_scale_fn adc_scale_fn[] = {
 	[ADC_SCALE_PA_THERM] = {pm8xxx_adc_scale_pa_therm},
 	[ADC_SCALE_PMIC_THERM] = {pm8xxx_adc_scale_pmic_therm},
 	[ADC_SCALE_XOTHERM] = {pm8xxx_adc_tdkntcg_therm},
+#ifdef CONFIG_MACH_APQ8064_PALMAN
+	[ADC_SCALE_APQ_THERM] = {pm8xxx_adc_scale_apq_therm},
+#endif
 };
 
 /* On PM8921 ADC the MPP needs to first be configured
@@ -247,6 +262,53 @@ static int32_t pm8xxx_adc_arb_cntrl(uint32_t arb_cntrl,
 	return 0;
 }
 
+#ifdef CONFIG_MACH_APQ8064_PALMAN
+static int32_t pm8xxx_adc_apqtherm_power(bool on)
+{
+	int rc = 0;
+
+	if (!apq_therm) {
+		pr_err("pm8xxx adc apq_therm not valid\n");
+		return -EINVAL;
+	}
+
+	if (on) {
+		rc = regulator_set_voltage(apq_therm,
+				PM8XXX_ADC_APQ_THERM_VREG_UV_MIN,
+				PM8XXX_ADC_APQ_THERM_VREG_UV_MAX);
+		if (rc < 0) {
+			pr_err("failed to set the voltage for "
+					"apq_therm with error %d\n", rc);
+			return rc;
+		}
+
+		rc = regulator_set_optimum_mode(apq_therm,
+				PM8XXX_ADC_APQ_THERM_VREG_UA_LOAD);
+		if (rc < 0) {
+			pr_err("failed to set optimum mode for "
+					"apq_therm with error %d\n", rc);
+			return rc;
+		}
+
+		rc = regulator_enable(apq_therm);
+		if (rc < 0) {
+			pr_err("failed to enable apq_therm vreg "
+					"with error %d\n", rc);
+			return rc;
+		}
+	} else {
+		rc = regulator_disable(apq_therm);
+		if (rc < 0) {
+			pr_err("failed to disable apq_therm vreg "
+					"with error %d\n", rc);
+			return rc;
+		}
+	}
+
+	return rc;
+}
+#endif
+
 static int32_t pm8xxx_adc_patherm_power(bool on)
 {
 	int rc = 0;
@@ -307,12 +369,21 @@ static int32_t pm8xxx_adc_xo_vote(bool on)
 static int32_t pm8xxx_adc_channel_power_enable(uint32_t channel,
 							bool power_cntrl)
 {
+#ifdef CONFIG_MACH_APQ8064_PALMAN
+	struct pm8xxx_adc *adc_pmic = pmic_adc;
+#endif
 	int rc = 0;
 
 	switch (channel) {
 	case ADC_MPP_1_AMUX8:
 		rc = pm8xxx_adc_patherm_power(power_cntrl);
 		break;
+#ifdef CONFIG_MACH_APQ8064_PALMAN
+	case ADC_MPP_1_AMUX3:
+		if (adc_pmic->apq_therm)
+			rc = pm8xxx_adc_apqtherm_power(power_cntrl);
+		break;
+#endif
 	case CHANNEL_DIE_TEMP:
 	case CHANNEL_MUXOFF:
 		rc = pm8xxx_adc_xo_vote(power_cntrl);
@@ -1302,6 +1373,17 @@ static int __devinit pm8xxx_adc_probe(struct platform_device *pdev)
 		pr_err("failed to request pa_therm vreg with error %d\n", rc);
 		pa_therm = NULL;
 	}
+#ifdef CONFIG_MACH_APQ8064_PALMAN
+	if (pdata->apq_therm) {
+		apq_therm = regulator_get(adc_pmic->dev, "apq_therm");
+		if (IS_ERR(apq_therm)) {
+			rc = PTR_ERR(apq_therm);
+			pr_err("failed to request apq_therm vreg with error %d\n", rc);
+			apq_therm = NULL;
+		}
+		adc_pmic->apq_therm = true;
+	}
+#endif
 	return 0;
 }
 

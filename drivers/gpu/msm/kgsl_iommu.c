@@ -2170,8 +2170,6 @@ static void kgsl_iommu_set_pagefault(struct kgsl_mmu *mmu)
 	/* Loop through all IOMMU devices to check for fault */
 	for (i = 0; i < iommu->unit_count; i++) {
 		for (j = 0; j < iommu->iommu_units[i].dev_count; j++) {
-			if (!iommu->iommu_units[i].dev[j].attached)
-				continue;
 			fsr = KGSL_IOMMU_GET_CTX_REG(iommu,
 				(&(iommu->iommu_units[i])),
 				iommu->iommu_units[i].dev[j].ctx_id, FSR);

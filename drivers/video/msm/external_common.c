@@ -886,6 +886,20 @@ static ssize_t hdmi_common_rda_spkr_alloc_data_block(struct device *dev,
 	return ret;
 }
 
+#ifdef CONFIG_SLIMPORT_ANX7808
+static ssize_t hdmi_common_rda_vga_connected(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	ssize_t ret = 0;
+	int cable_type = 0;
+
+	cable_type = is_slimport_vga();
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", cable_type);
+	DEV_INFO("%s: '%d'\n", __func__, cable_type);
+	return ret;
+}
+#endif
+
 static DEVICE_ATTR(video_mode, S_IRUGO | S_IWUSR,
 	external_common_rda_video_mode, external_common_wta_video_mode);
 static DEVICE_ATTR(video_mode_str, S_IRUGO, external_common_rda_video_mode_str,
@@ -920,6 +934,9 @@ static DEVICE_ATTR(audio_data_block, S_IRUGO, hdmi_common_rda_audio_data_block,
 	NULL);
 static DEVICE_ATTR(spkr_alloc_data_block, S_IRUGO,
 	hdmi_common_rda_spkr_alloc_data_block, NULL);
+#ifdef CONFIG_SLIMPORT_ANX7808
+static DEVICE_ATTR(vga_connected, S_IRUGO, hdmi_common_rda_vga_connected, NULL);
+#endif
 
 static struct attribute *external_common_fs_attrs[] = {
 	&dev_attr_video_mode.attr,
@@ -950,6 +967,9 @@ static struct attribute *external_common_fs_attrs[] = {
 	&dev_attr_hdmi_primary.attr,
 	&dev_attr_audio_data_block.attr,
 	&dev_attr_spkr_alloc_data_block.attr,
+#ifdef CONFIG_SLIMPORT_ANX7808
+	&dev_attr_vga_connected.attr,
+#endif
 	NULL,
 };
 static struct attribute_group external_common_fs_attr_group = {

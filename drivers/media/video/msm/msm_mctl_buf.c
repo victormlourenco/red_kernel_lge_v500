@@ -35,6 +35,10 @@
 #define D(fmt, args...) do {} while (0)
 #endif
 
+//                                                                    
+int logcount_nofreebuffer_available = 0;
+//                                                                  
+
 static int msm_vb2_ops_queue_setup(struct vb2_queue *vq,
 				const struct v4l2_format *fmt,
 				unsigned int *num_buffers,
@@ -223,7 +227,7 @@ static void msm_vb2_ops_buf_cleanup(struct vb2_buffer *vb)
 		for (i = 0; i < vb->num_planes; i++) {
 			mem = vb2_plane_cookie(vb, i);
 			if (!mem) {
-				D("%s Inst %p memory already freed up. return",
+				pr_err("%s Inst %p memory already freed up. return",
 					__func__, pcam_inst);
 				return;
 			}
@@ -244,7 +248,10 @@ static void msm_vb2_ops_buf_cleanup(struct vb2_buffer *vb)
 	} else {
 		mem = vb2_plane_cookie(vb, 0);
 		if (!mem)
+		{
+			pr_err("%s:mem is NULL, pcam_inst->vid_fmt.type=%d",__func__, pcam_inst->vid_fmt.type);
 			return;
+		}
 		D("%s: inst=0x%x, buf=0x%x, idx=%d\n", __func__,
 		(uint32_t)pcam_inst, (uint32_t)buf, vb->v4l2_buf.index);
 		vb_phyaddr = (unsigned long) videobuf2_to_pmem_contig(vb, 0);
@@ -264,14 +271,37 @@ static void msm_vb2_ops_buf_cleanup(struct vb2_buffer *vb)
 		spin_unlock_irqrestore(&pcam_inst->vq_irqlock, flags);
 	}
 	pmctl = msm_cam_server_get_mctl(pcam->mctl_handle);
-	if (pmctl == NULL) {
+	if (pmctl == NULL || pmctl->client == NULL) {
 		pr_err("%s No mctl found\n", __func__);
 		buf->state = MSM_BUFFER_STATE_UNUSED;
 		return;
 	}
+/*                                                                              */
+	if (!get_server_use_count() &&
+		pmctl && pmctl->hardware_running) {
+		pr_err("%s: daemon crashed but hardware is still running\n",
+			   __func__);
+		if (pmctl->mctl_release) {
+			pr_err("%s: Releasing now\n", __func__);
+			/*do not send any commands to hardware
+			after reaching this point*/
+			pmctl->mctl_cmd = NULL;
+			pmctl->mctl_release(pmctl);
+			pmctl->mctl_release = NULL;
+			pmctl->hardware_running = 0;
+		}
+		else {
+			pr_err("%s: pmctl release is NULL\n", __func__);
+		}
+	} else {
+		pr_err("server use count %d, pmctl pointer %p, hardware_running %d\n", get_server_use_count(),
+		pmctl, pmctl->hardware_running);
+	}
+/*                                                                              */
 	for (i = 0; i < vb->num_planes; i++) {
 		mem = vb2_plane_cookie(vb, i);
 		if (mem) {
+//                                                     
 			videobuf2_pmem_contig_user_put(mem, pmctl->client,
 				pmctl->domain_num);
 		} else {
@@ -451,7 +481,12 @@ int msm_mctl_buf_done_proc(
 		D("%s Copying timestamp as %ld.%ld", __func__,
 			cam_ts->timestamp.tv_sec, cam_ts->timestamp.tv_usec);
 		buf->vidbuf.v4l2_buf.timestamp = cam_ts->timestamp;
+		buf->vidbuf.v4l2_buf.sequence  = cam_ts->frame_id;
 	}
+	pcam_inst->sequence = buf->vidbuf.v4l2_buf.sequence;
+	D("%s Notify user about buffer %d image_mode %d frame_id %d", __func__,
+		buf->vidbuf.v4l2_buf.index, pcam_inst->image_mode,
+		buf->vidbuf.v4l2_buf.sequence);
 	vb2_buffer_done(&buf->vidbuf, VB2_BUF_STATE_DONE);
 	return 0;
 }
@@ -507,11 +542,7 @@ int msm_mctl_buf_done(struct msm_cam_media_controller *p_mctl,
 			if (idx > MSM_DEV_INST_MAX) {
 				idx = GET_VIDEO_INST_IDX(
 					buf_handle->inst_handle);
-				if (idx > MSM_DEV_INST_MAX) {
-					pr_err("%s Invalid idx %d ", __func__,
-						idx);
-					return -EINVAL;
-				}
+				BUG_ON(idx > MSM_DEV_INST_MAX);
 				pcam_inst = p_mctl->pcam_ptr->dev_inst[idx];
 			} else {
 				pcam_inst = p_mctl->pcam_ptr->mctl_node.
@@ -643,10 +674,7 @@ struct msm_cam_v4l2_dev_inst *msm_mctl_get_pcam_inst(
 		idx = GET_MCTLPP_INST_IDX(buf_handle->inst_handle);
 		if (idx > MSM_DEV_INST_MAX) {
 			idx = GET_VIDEO_INST_IDX(buf_handle->inst_handle);
-			if (idx > MSM_DEV_INST_MAX) {
-				pr_err("%s Invalid idx %d ", __func__, idx);
-				return NULL;
-			}
+			BUG_ON(idx > MSM_DEV_INST_MAX);
 			pcam_inst = pcam->dev_inst[idx];
 		} else {
 			pcam_inst = pcam->mctl_node.dev_inst[idx];
@@ -686,9 +714,13 @@ int msm_mctl_reserve_free_buf(
 	 * camera instance, he would send the preferred camera instance.
 	 * If the preferred camera instance is NULL, get the
 	 * camera instance using the image mode passed */
-	if (!pcam_inst)
+	if (!pcam_inst) {
 		pcam_inst = msm_mctl_get_pcam_inst(pmctl, buf_handle);
-
+		if(!pcam_inst) {
+			pr_err("%s: pcam_inst is NULL\n", __func__);
+			return rc;
+		}
+	}
 	if (!pcam_inst || !pcam_inst->streamon) {
 		pr_err("%s: stream is turned off\n", __func__);
 		return rc;
@@ -767,8 +799,17 @@ int msm_mctl_reserve_free_buf(
 		break;
 	}
 	if (rc != 0)
-		D("%s:No free buffer available: inst = 0x%p ",
-				__func__, pcam_inst);
+	//                                                                    
+	{
+		logcount_nofreebuffer_available++;
+		if (logcount_nofreebuffer_available > 30)
+		{
+			pr_err("%s:No free buffer available: inst = 0x%p ",
+					__func__, pcam_inst);
+			logcount_nofreebuffer_available = 0;
+		}
+	}
+	//                                                                  
 	spin_unlock_irqrestore(&pcam_inst->vq_irqlock, flags);
 	return rc;
 }
@@ -827,10 +868,7 @@ int msm_mctl_buf_done_pp(struct msm_cam_media_controller *pmctl,
 		idx = GET_MCTLPP_INST_IDX(buf_handle->inst_handle);
 		if (idx > MSM_DEV_INST_MAX) {
 			idx = GET_VIDEO_INST_IDX(buf_handle->inst_handle);
-			if (idx > MSM_DEV_INST_MAX) {
-				pr_err("%s Invalid idx %d ", __func__, idx);
-				return -EINVAL;
-			}
+			BUG_ON(idx > MSM_DEV_INST_MAX);
 			pcam_inst = pmctl->pcam_ptr->dev_inst[idx];
 		} else {
 			pcam_inst = pmctl->pcam_ptr->mctl_node.dev_inst[idx];
@@ -858,7 +896,8 @@ int msm_mctl_buf_done_pp(struct msm_cam_media_controller *pmctl,
 		__func__, pcam_inst, frame->ch_paddr[0], ret_frame->dirty);
 	cam_ts.present = 1;
 	cam_ts.timestamp = ret_frame->timestamp;
-	if (ret_frame->dirty)
+	cam_ts.frame_id   = ret_frame->frame_id;
+	if (ret_frame->dirty || (ret_frame->frame_id < pcam_inst->sequence))
 		/* the frame is dirty, not going to disptach to app */
 		rc = msm_mctl_release_free_buf(pmctl, pcam_inst, frame);
 	else

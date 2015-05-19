@@ -26,6 +26,7 @@
 struct batt_temp_chip {
 	struct delayed_work monitor_work;
 	struct batt_temp_pdata *pdata;
+	struct wake_lock		monitor_wake_lock;
 };
 
 #define INIT_VAL 1000
@@ -68,8 +69,7 @@ static int determin_batt_temp_state(struct batt_temp_pdata *pdata,
 			else
 				temp_state = TEMP_LEVEL_DECREASING;
 		} else if (batt_temp > pdata->temp_level[TEMP_LEVEL_HOT_RECHARGING]) {
-			if (temp_state == TEMP_LEVEL_HOT_STOPCHARGING
-					|| temp_state == TEMP_LEVEL_DECREASING)
+			if (temp_state == TEMP_LEVEL_HOT_STOPCHARGING)
 				temp_state = TEMP_LEVEL_HOT_STOPCHARGING;
 			else if (temp_state == TEMP_LEVEL_DECREASING)
 				temp_state = TEMP_LEVEL_DECREASING;
@@ -154,6 +154,9 @@ static void batt_temp_monitor_work(struct work_struct *work)
 	else
 		batt_temp = ret.intval;
 
+	if (!pdata->is_ext_power() && wake_lock_active(&chip->monitor_wake_lock))
+		wake_unlock(&chip->monitor_wake_lock);
+
 	temp_state = determin_batt_temp_state(pdata, batt_temp, batt_mvolt);
 	pr_debug("%s: batt_temp = %d batt_mvolt = %d state = %d\n", __func__,
 			batt_temp, batt_mvolt, temp_state);
@@ -165,6 +168,8 @@ static void batt_temp_monitor_work(struct work_struct *work)
 		pr_info("%s: stop charging!! state = %d temp = %d mvolt = %d \n",
 				__func__, temp_state, batt_temp, batt_mvolt);
 		pdata->set_chg_i_limit(pdata->i_restore);
+		if (!wake_lock_active(&chip->monitor_wake_lock))
+			wake_lock(&chip->monitor_wake_lock);
 		pdata->disable_charging();
 		pdata->set_health_state(POWER_SUPPLY_HEALTH_OVERHEAT, 0);
 		break;
@@ -184,6 +189,8 @@ static void batt_temp_monitor_work(struct work_struct *work)
 				__func__, temp_state, batt_temp, batt_mvolt);
 		pdata->set_chg_i_limit(pdata->i_restore);
 		pdata->enable_charging();
+		if (wake_lock_active(&chip->monitor_wake_lock))
+			wake_unlock(&chip->monitor_wake_lock);
 		pdata->set_health_state(POWER_SUPPLY_HEALTH_GOOD,
 				pdata->i_restore);
 		break;
@@ -191,6 +198,8 @@ static void batt_temp_monitor_work(struct work_struct *work)
 		if (temp_old_state != TEMP_LEVEL_NORMAL) {
 			pdata->set_chg_i_limit(pdata->i_restore);
 			pdata->enable_charging();
+			if (wake_lock_active(&chip->monitor_wake_lock))
+				wake_unlock(&chip->monitor_wake_lock);
 		}
 		pdata->set_health_state(POWER_SUPPLY_HEALTH_GOOD, 0);
 	default:
@@ -246,6 +255,7 @@ static int batt_temp_ctrl_probe(struct platform_device *pdev)
 
 	device_create_file(&pdev->dev, &dev_attr_fake_temp);
 
+	wake_lock_init(&chip->monitor_wake_lock, WAKE_LOCK_SUSPEND, "batt_temp_monior");
 	INIT_DELAYED_WORK(&chip->monitor_work,
 					batt_temp_monitor_work);
 	schedule_delayed_work(&chip->monitor_work,

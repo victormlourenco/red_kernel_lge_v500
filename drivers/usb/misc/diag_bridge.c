@@ -89,8 +89,6 @@ static void __diag_bridge_delete(struct kref *kref, bool unregister)
 
 	usb_put_dev(dev->udev);
 	__dev[id] = 0;
-	if (unregister)
-		platform_device_unregister(dev->pdev);
 	kfree(dev);
 }
 
@@ -516,6 +514,7 @@ static void diag_bridge_disconnect(struct usb_interface *ifc)
 
 	dev_dbg(&dev->ifc->dev, "%s:\n", __func__);
 
+	platform_device_unregister(dev->pdev);
 	mutex_lock(&dev->ifc_mutex);
 	dev->ifc = NULL;
 	mutex_unlock(&dev->ifc_mutex);

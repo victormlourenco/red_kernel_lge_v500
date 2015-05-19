@@ -2936,6 +2936,8 @@ static int set_battery_data(struct pm8921_bms_chip *chip)
 		goto palladium;
 	else if (chip->batt_type == BATT_LGE)
 		goto lge;
+	else if (chip->batt_type == BATT_LGE_4600)
+		goto lge_4600;
 
 	battery_id = read_battery_id(chip);
 	if (battery_id < 0) {
@@ -2955,36 +2957,51 @@ static int set_battery_data(struct pm8921_bms_chip *chip)
 	}
 
 palladium:
-		chip->fcc = palladium_1500_data.fcc;
-		chip->fcc_temp_lut = palladium_1500_data.fcc_temp_lut;
-		chip->fcc_sf_lut = palladium_1500_data.fcc_sf_lut;
-		chip->pc_temp_ocv_lut = palladium_1500_data.pc_temp_ocv_lut;
-		chip->pc_sf_lut = palladium_1500_data.pc_sf_lut;
-		chip->rbatt_sf_lut = palladium_1500_data.rbatt_sf_lut;
-		chip->default_rbatt_mohm
-				= palladium_1500_data.default_rbatt_mohm;
-		chip->delta_rbatt_mohm = palladium_1500_data.delta_rbatt_mohm;
-		return 0;
+	chip->fcc = palladium_1500_data.fcc;
+	chip->fcc_temp_lut = palladium_1500_data.fcc_temp_lut;
+	chip->fcc_sf_lut = palladium_1500_data.fcc_sf_lut;
+	chip->pc_temp_ocv_lut = palladium_1500_data.pc_temp_ocv_lut;
+	chip->pc_sf_lut = palladium_1500_data.pc_sf_lut;
+	chip->rbatt_sf_lut = palladium_1500_data.rbatt_sf_lut;
+	chip->default_rbatt_mohm
+			= palladium_1500_data.default_rbatt_mohm;
+	chip->delta_rbatt_mohm = palladium_1500_data.delta_rbatt_mohm;
+	return 0;
 desay:
-		chip->fcc = desay_5200_data.fcc;
-		chip->fcc_temp_lut = desay_5200_data.fcc_temp_lut;
-		chip->pc_temp_ocv_lut = desay_5200_data.pc_temp_ocv_lut;
-		chip->pc_sf_lut = desay_5200_data.pc_sf_lut;
-		chip->rbatt_sf_lut = desay_5200_data.rbatt_sf_lut;
-		chip->default_rbatt_mohm = desay_5200_data.default_rbatt_mohm;
-		chip->delta_rbatt_mohm = desay_5200_data.delta_rbatt_mohm;
-		return 0;
+	chip->fcc = desay_5200_data.fcc;
+	chip->fcc_temp_lut = desay_5200_data.fcc_temp_lut;
+	chip->pc_temp_ocv_lut = desay_5200_data.pc_temp_ocv_lut;
+	chip->pc_sf_lut = desay_5200_data.pc_sf_lut;
+	chip->rbatt_sf_lut = desay_5200_data.rbatt_sf_lut;
+	chip->default_rbatt_mohm = desay_5200_data.default_rbatt_mohm;
+	chip->delta_rbatt_mohm = desay_5200_data.delta_rbatt_mohm;
+	return 0;
 lge:
-		chip->fcc = lge_2100_mako_data.fcc;
-		chip->fcc_temp_lut = lge_2100_mako_data.fcc_temp_lut;
-		chip->fcc_sf_lut = lge_2100_mako_data.fcc_sf_lut;
-		chip->pc_temp_ocv_lut = lge_2100_mako_data.pc_temp_ocv_lut;
-		chip->pc_sf_lut = lge_2100_mako_data.pc_sf_lut;
-		chip->rbatt_sf_lut = lge_2100_mako_data.rbatt_sf_lut;
-		chip->default_rbatt_mohm
-				= lge_2100_mako_data.default_rbatt_mohm;
-		chip->delta_rbatt_mohm = lge_2100_mako_data.delta_rbatt_mohm;
-		return 0;
+#ifdef CONFIG_MACH_APQ8064_MAKO
+	chip->fcc = lge_2100_mako_data.fcc;
+	chip->fcc_temp_lut = lge_2100_mako_data.fcc_temp_lut;
+	chip->fcc_sf_lut = lge_2100_mako_data.fcc_sf_lut;
+	chip->pc_temp_ocv_lut = lge_2100_mako_data.pc_temp_ocv_lut;
+	chip->pc_sf_lut = lge_2100_mako_data.pc_sf_lut;
+	chip->rbatt_sf_lut = lge_2100_mako_data.rbatt_sf_lut;
+	chip->default_rbatt_mohm
+			= lge_2100_mako_data.default_rbatt_mohm;
+	chip->delta_rbatt_mohm = lge_2100_mako_data.delta_rbatt_mohm;
+#endif
+	return 0;
+lge_4600:
+#ifdef CONFIG_MACH_APQ8064_PALMAN
+	chip->fcc = lge_4600_palman_data.fcc;
+	chip->fcc_temp_lut = lge_4600_palman_data.fcc_temp_lut;
+	chip->fcc_sf_lut = lge_4600_palman_data.fcc_sf_lut;
+	chip->pc_temp_ocv_lut = lge_4600_palman_data.pc_temp_ocv_lut;
+	chip->pc_sf_lut = lge_4600_palman_data.pc_sf_lut;
+	chip->rbatt_sf_lut = lge_4600_palman_data.rbatt_sf_lut;
+	chip->default_rbatt_mohm
+			= lge_4600_palman_data.default_rbatt_mohm;
+	chip->delta_rbatt_mohm = lge_4600_palman_data.delta_rbatt_mohm;
+#endif
+	return 0;
 }
 
 enum bms_request_operation {

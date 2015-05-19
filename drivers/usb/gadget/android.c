@@ -149,6 +149,7 @@ struct android_dev {
 	struct pm_qos_request pm_qos_req_dma;
 	struct work_struct work;
 
+	bool otg;
 	/* A list of struct android_configuration */
 	struct list_head configs;
 	int configs_num;
@@ -2224,6 +2225,35 @@ out:
 	return snprintf(buf, PAGE_SIZE, "%s\n", state);
 }
 
+#if defined(CONFIG_USB_OTG)
+extern int usb_id_sel_enable(int on);
+
+static ssize_t otg_show(struct device *pdev, struct device_attribute *attr, char *buf)
+{
+	struct android_dev *dev = dev_get_drvdata(pdev);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", dev->otg);
+}
+
+static ssize_t otg_store(struct device *pdev, struct device_attribute *attr, const char *buff, size_t size)
+{
+	struct android_dev *dev = dev_get_drvdata(pdev);
+	int otg = 0;
+
+	mutex_lock(&dev->mutex);
+	sscanf(buff, "%d", &otg);
+	dev->otg = otg;
+	mutex_unlock(&dev->mutex);
+
+	if(otg == 1) {
+		usb_id_sel_enable(1);		//USB_ID = HOST_ID
+	} else {
+		usb_id_sel_enable(0);		//USB_ID = DEVICE_ID
+	}
+	return size;
+}
+#endif
+
 #define DESCRIPTOR_ATTR(field, format_string)				\
 static ssize_t								\
 field ## _show(struct device *dev, struct device_attribute *attr,	\
@@ -2283,6 +2313,9 @@ static DEVICE_ATTR(pm_qos, S_IRUGO | S_IWUSR,
 static DEVICE_ATTR(state, S_IRUGO, state_show, NULL);
 static DEVICE_ATTR(remote_wakeup, S_IRUGO | S_IWUSR,
 		remote_wakeup_show, remote_wakeup_store);
+#ifdef CONFIG_USB_OTG
+static DEVICE_ATTR(otg, 0664, otg_show, otg_store);
+#endif
 
 static struct device_attribute *android_usb_attributes[] = {
 	&dev_attr_idVendor,
@@ -2299,6 +2332,9 @@ static struct device_attribute *android_usb_attributes[] = {
 	&dev_attr_pm_qos,
 	&dev_attr_state,
 	&dev_attr_remote_wakeup,
+#ifdef CONFIG_USB_OTG
+	&dev_attr_otg,
+#endif
 	NULL
 };
 

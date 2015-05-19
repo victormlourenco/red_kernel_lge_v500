@@ -184,6 +184,11 @@ config FB_MSM_MIPI_DSI_LGIT
 	select FB_MSM_MIPI_DSI
 	default n
 
+config FB_MSM_MIPI_DSI_LGIT_WUXGA
+	bool
+	select FB_MSM_MIPI_DSI
+	default n
+
 config FB_MSM_MIPI_DSI_RENESAS
 	bool
 	select FB_MSM_MIPI_DSI
@@ -310,6 +315,11 @@ config FB_MSM_LCDC_WXGA
 config FB_MSM_MIPI_LGIT_VIDEO_WXGA_PT
 	bool
 	select FB_MSM_MIPI_DSI_LGIT
+	default n
+
+config FB_MSM_MIPI_LGIT_VIDEO_WUXGA_PT
+	bool
+	select FB_MSM_MIPI_DSI_LGIT_WUXGA
 	default n
 
 config FB_MSM_LVDS_CHIMEI_WXGA
@@ -664,6 +674,10 @@ config FB_MSM_MIPI_LGIT_VIDEO_WXGA_PT_PANEL
 	bool "MIPI LG Display WXGA PT Panel"
 	select FB_MSM_MIPI_LGIT_VIDEO_WXGA_PT
 
+config FB_MSM_MIPI_LGIT_VIDEO_WUXGA_PT_PANEL
+	bool "MIPI LG Display WUXGA PT Panel"
+	select FB_MSM_MIPI_LGIT_VIDEO_WUXGA_PT
+
 config FB_MSM_MIPI_TOSHIBA_VIDEO_WVGA_PT_PANEL
 	bool "MIPI Toshiba WVGA PT Panel"
 	select FB_MSM_MIPI_TOSHIBA_VIDEO_WVGA_PT
@@ -754,6 +768,14 @@ config LGIT_VIDEO_WXGA_CABC
 	bool "Content Adaptive Backlight Control on LGIT WXGA Panel"
 	default y
 	depends on FB_MSM_MIPI_LGIT_VIDEO_WXGA_PT_PANEL
+	help
+	  Enable CABC(Content Apaptive Backlight Control) on LGIT Panel
+	  to reduce power consumption
+
+config LGIT_VIDEO_WUXGA_CABC
+	bool "Content Adaptive Backlight Control on LGIT WUGA Panel"
+	default n
+	depends on FB_MSM_MIPI_LGIT_VIDEO_WUXGA_PT_PANEL
 	help
 	  Enable CABC(Content Apaptive Backlight Control) on LGIT Panel
 	  to reduce power consumption

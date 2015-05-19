@@ -20,11 +20,19 @@
 #define FCC_CC_COLS		5
 #define FCC_TEMP_COLS		8
 
+#ifdef CONFIG_MACH_APQ8064_PALMAN
+#define PC_CC_ROWS             30
+#define PC_CC_COLS             13
+
+#define PC_TEMP_ROWS		31
+#define PC_TEMP_COLS		8
+#else
 #define PC_CC_ROWS             29
 #define PC_CC_COLS             13
 
 #define PC_TEMP_ROWS		29
 #define PC_TEMP_COLS		8
+#endif
 
 #define MAX_SINGLE_LUT_COLS	20
 
@@ -109,6 +117,7 @@ enum battery_type {
 	BATT_PALLADIUM,
 	BATT_DESAY,
 	BATT_LGE,
+	BATT_LGE_4600,
 };
 
 /**
@@ -147,6 +156,7 @@ struct pm8921_bms_platform_data {
 extern struct pm8921_bms_battery_data  palladium_1500_data;
 extern struct pm8921_bms_battery_data  desay_5200_data;
 extern struct pm8921_bms_battery_data  lge_2100_mako_data;
+extern struct pm8921_bms_battery_data  lge_4600_palman_data;
 /**
  * pm8921_bms_get_vsense_avg - return the voltage across the sense
  *				resitor in microvolts

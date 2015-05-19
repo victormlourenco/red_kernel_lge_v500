@@ -270,7 +270,9 @@ static int __devinit pm8xxx_vib_probe(struct platform_device *pdev)
 	if (rc < 0)
 		goto err_read_vib;
 
-	pm8xxx_vib_enable(&vib->timed_dev, pdata->initial_vibrate_ms);
+	/* Check vib time from board file to enable boot vibration  */
+	if (pdata->initial_vibrate_ms)
+		pm8xxx_vib_enable(&vib->timed_dev, pdata->initial_vibrate_ms);
 
 	platform_set_drvdata(pdev, vib);
 

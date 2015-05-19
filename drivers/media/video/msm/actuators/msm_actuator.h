@@ -89,6 +89,15 @@ struct msm_actuator_ctrl_t {
 	uint16_t initial_code;
 	struct msm_camera_i2c_reg_tbl *i2c_reg_tbl;
 	uint16_t i2c_tbl_index;
+/*                                                                 */
+	uint8_t AF_defocus_enable;
+	uint16_t AF_center_best_code;
+	uint16_t AF_balance_best_code;
+	uint16_t AF_defocus_offset;
+	uint16_t AF_LG_center_best_code;
+	uint16_t AF_LG_defocus_offset;
+	uint16_t af_status;
+/*                                                                 */
 };
 
 #ifdef CONFIG_MSM_ACTUATOR

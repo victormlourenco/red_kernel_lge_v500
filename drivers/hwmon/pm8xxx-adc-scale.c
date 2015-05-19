@@ -26,6 +26,123 @@
    their framework which is 0.1DegC. True resolution of 0.1DegC
    will result in the below table size to increase by 10 times */
 static struct pm8xxx_adc_map_pt def_adcmap_btm_threshold[] = {
+#ifdef CONFIG_MACH_APQ8064_PALMAN
+/*
+ * board speficic thermistor characteristic
+ * Rev.C (Real B): pull-up registor 105.0Kohm, series resistor = 16.0Kohm
+ * Please don't change below values.
+ */
+	{-300,	1673},
+	{-290,	1665},
+	{-280,	1657},
+	{-270,	1648},
+	{-260,	1640},
+	{-250,	1630},
+	{-240,	1621},
+	{-230,	1611},
+	{-220,	1600},
+	{-210,	1589},
+	{-200,	1578},
+	{-190,	1566},
+	{-180,	1554},
+	{-170,	1542},
+	{-160,	1529},
+	{-150,	1515},
+	{-140,	1502},
+	{-130,	1487},
+	{-120,	1473},
+	{-110,	1458},
+	{-100,	1442},
+	{-90,	1426},
+	{-80,	1410},
+	{-70,	1394},
+	{-60,	1377},
+	{-50,	1360},
+	{-40,	1342},
+	{-30,	1324},
+	{-20,	1306},
+	{-10,	1288},
+	{0,	1269},
+	{10,	1250},
+	{20,	1231},
+	{30,	1212},
+	{40,	1193},
+	{50,	1174},
+	{60,	1154},
+	{70,	1135},
+	{80,	1115},
+	{90,	1096},
+	{100,	1076},
+	{110,	1056},
+	{120,	1037},
+	{130,	1018},
+	{140,	998},
+	{150,	979},
+	{160,	960},
+	{170,	942},
+	{180,	923},
+	{190,	905},
+	{200,	887},
+	{210,	869},
+	{220,	851},
+	{230,	834},
+	{240,	817},
+	{250,	800},
+	{260,	784},
+	{270,	767},
+	{280,	752},
+	{290,	736},
+	{300,	721},
+	{310,	706},
+	{320,	692},
+	{330,	678},
+	{340,	664},
+	{350,	650},
+	{360,	637},
+	{370,	625},
+	{380,	612},
+	{390,	600},
+	{400,	588},
+	{410,	577},
+	{420,	566},
+	{430,	555},
+	{440,	545},
+	{450,	535},
+	{460,	525},
+	{470,	516},
+	{480,	506},
+	{490,	497},
+	{500,	489},
+	{510,	480},
+	{520,	472},
+	{530,	465},
+	{540,	457},
+	{550,	450},
+	{560,	443},
+	{570,	436},
+	{580,	429},
+	{590,	423},
+	{600,	417},
+	{610,	411},
+	{620,	405},
+	{630,	400},
+	{640,	394},
+	{650,	389},
+	{660,	384},
+	{670,	379},
+	{680,	375},
+	{690,	370},
+	{700,	366},
+	{710,	362},
+	{720,	357},
+	{730,	354},
+	{740,	350},
+	{750,	346},
+	{760,	343},
+	{770,	339},
+	{780,	336},
+	{790,	333}
+#else/* QCT_ORG */
 	{-300,	1642},
 	{-200,	1544},
 	{-100,	1414},
@@ -109,6 +226,7 @@ static struct pm8xxx_adc_map_pt def_adcmap_btm_threshold[] = {
 	{770,	213},
 	{780,	208},
 	{790,	203}
+#endif
 };
 
 static struct pm8xxx_adc_map_pt def_adcmap_pa_therm[] = {
@@ -680,6 +798,28 @@ int32_t pm8xxx_adc_scale_pa_therm(int32_t adc_code,
 			&adc_chan_result->physical);
 }
 EXPORT_SYMBOL_GPL(pm8xxx_adc_scale_pa_therm);
+
+#ifdef CONFIG_MACH_APQ8064_PALMAN
+int32_t pm8xxx_adc_scale_apq_therm(int32_t adc_code,
+		const struct pm8xxx_adc_properties *adc_properties,
+		const struct pm8xxx_adc_chan_properties *chan_properties,
+		struct pm8xxx_adc_chan_result *adc_chan_result)
+{
+/* Reference only - Place holder to add APQ THERM */
+/* Initial addition by adding the pa_therm funtionlity above */
+	int64_t apq_voltage = 0;
+
+	apq_voltage = pm8xxx_adc_scale_ratiometric_calib(adc_code,
+			adc_properties, chan_properties);
+
+	return pm8xxx_adc_map_linear(
+			def_adcmap_pa_therm,
+			ARRAY_SIZE(def_adcmap_pa_therm),
+			apq_voltage,
+			&adc_chan_result->physical);
+}
+EXPORT_SYMBOL_GPL(pm8xxx_adc_scale_apq_therm);
+#endif
 
 int32_t pm8xxx_adc_scale_batt_id(int32_t adc_code,
 		const struct pm8xxx_adc_properties *adc_properties,
