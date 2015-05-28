@@ -100,7 +100,7 @@ static int update_cpu_max_freq(int cpu, uint32_t max_freq)
 	return ret;
 }
 
-static void __cpuinit do_core_control(long temp)
+static void do_core_control(long temp)
 {
 	int i = 0;
 	int ret = 0;
@@ -160,7 +160,7 @@ static void __cpuinit do_core_control(long temp)
 	mutex_unlock(&core_control_mutex);
 }
 
-static void __cpuinit check_temp(struct work_struct *work)
+static void check_temp(struct work_struct *work)
 {
 	static int limit_init;
 	struct tsens_device tsens_dev;
@@ -270,7 +270,7 @@ static void msm_thermal_limit_holding_timer(unsigned long data)
 	limit_cpufreq = 0;
 }
 #endif
-static int __cpuinit msm_thermal_cpu_callback(struct notifier_block *nfb,
+static int msm_thermal_cpu_callback(struct notifier_block *nfb,
 		unsigned long action, void *hcpu)
 {
 	unsigned int cpu = (unsigned long)hcpu;
@@ -299,7 +299,7 @@ static struct notifier_block __refdata msm_thermal_cpu_notifier = {
  * status will be carried over to the process stopping the msm_thermal, as
  * we dont want to online a core and bring in the thermal issues.
  */
-static void __cpuinit disable_msm_thermal(void)
+static void disable_msm_thermal(void)
 {
 	int cpu = 0;
 
@@ -347,7 +347,7 @@ static void __cpuinit disable_msm_thermal(void)
 	}
 }
 
-static int __cpuinit set_enabled(const char *val, const struct kernel_param *kp)
+static int set_enabled(const char *val, const struct kernel_param *kp)
 {
 	int ret = 0;
 
@@ -373,7 +373,7 @@ MODULE_PARM_DESC(enabled, "enforce thermal limit on cpu");
 
 
 /* Call with core_control_mutex locked */
-static int __cpuinit update_offline_cores(int val)
+static int update_offline_cores(int val)
 {
 	int cpu = 0;
 	int ret = 0;
@@ -401,7 +401,7 @@ static ssize_t show_cc_enabled(struct kobject *kobj,
 	return snprintf(buf, PAGE_SIZE, "%d\n", core_control_enabled);
 }
 
-static ssize_t __cpuinit store_cc_enabled(struct kobject *kobj,
+static ssize_t store_cc_enabled(struct kobject *kobj,
 		struct kobj_attribute *attr, const char *buf, size_t count)
 {
 	int ret = 0;
@@ -438,7 +438,7 @@ static ssize_t show_cpus_offlined(struct kobject *kobj,
 	return snprintf(buf, PAGE_SIZE, "%d\n", cpus_offlined);
 }
 
-static ssize_t __cpuinit store_cpus_offlined(struct kobject *kobj,
+static ssize_t store_cpus_offlined(struct kobject *kobj,
 		struct kobj_attribute *attr, const char *buf, size_t count)
 {
 	int ret = 0;
