@@ -402,6 +402,8 @@ obj-$(CONFIG_DEBUG_FS) += msm_cpr-debug.o
 endif
 obj-$(CONFIG_MSM_CPU_PWRCTL) +=  msm_cpu_pwrctl.o
 
+obj-$(CONFIG_MSM_MPDEC) += msm_mpdecision.o
+
 obj-$(CONFIG_CPU_FREQ_MSM) += cpufreq.o
 
 obj-$(CONFIG_ARCH_RANDOM) += early_random.o
