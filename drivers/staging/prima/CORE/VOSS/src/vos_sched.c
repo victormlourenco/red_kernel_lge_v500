@@ -626,8 +626,7 @@ VosMCThread
       "%s: MC Thread exiting!!!!", __func__);
   complete_and_exit(&pSchedContext->McShutdown, 0);
 } /* VosMCThread() */
-
-v_BOOL_t isWDresetInProgress(void)
+int isWDresetInProgress(void)
 {
    VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO,
                 "%s: Reset is in Progress...",__func__);
@@ -637,7 +636,7 @@ v_BOOL_t isWDresetInProgress(void)
    }
    else
    {
-      return FALSE;
+      return 0;
    }
 }
 /*---------------------------------------------------------------------------
@@ -731,8 +730,7 @@ VosWDThread
         if(!pWdContext->resetInProgress)
         {
           VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_FATAL,
-          "%s: Do WLAN re-init only when it is shutdown !!",__func__);
-          break;
+          "%s: Trying to do WLAN re-init when it is not shutdown !!",__func__);
         }
         vosStatus = hdd_wlan_re_init();
 
@@ -1123,7 +1121,7 @@ static int VosRXThread ( void * Arg )
         /* Rx Thread Suspended */
         complete(&pHddCtx->rx_sus_event_var);
 
-        INIT_COMPLETION(pSchedContext->ResumeRxEvent);
+        init_completion(&pSchedContext->ResumeRxEvent);
         spin_unlock(&pSchedContext->RxThreadLock);
 
         /* Wait for Resume Indication */
