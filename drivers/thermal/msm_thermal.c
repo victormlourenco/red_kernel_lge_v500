@@ -466,19 +466,19 @@ done_cc:
 	return count;
 }
 
-static __cpuinitdata struct kobj_attribute cc_enabled_attr =
+static struct kobj_attribute cc_enabled_attr =
 __ATTR(enabled, 0644, show_cc_enabled, store_cc_enabled);
 
-static __cpuinitdata struct kobj_attribute cpus_offlined_attr =
+static struct kobj_attribute cpus_offlined_attr =
 __ATTR(cpus_offlined, 0644, show_cpus_offlined, store_cpus_offlined);
 
-static __cpuinitdata struct attribute *cc_attrs[] = {
+static struct attribute *cc_attrs[] = {
 	&cc_enabled_attr.attr,
 	&cpus_offlined_attr.attr,
 	NULL,
 };
 
-static __cpuinitdata struct attribute_group cc_attr_group = {
+static struct attribute_group cc_attr_group = {
 	.attrs = cc_attrs,
 };
 
