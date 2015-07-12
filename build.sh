@@ -4,11 +4,11 @@ fi
  
 make ARCH=arm CROSS_COMPILE=/home/victor/uber/scripts/out/arm-linux-androideabi-4.9-cortex-a15/bin/arm-linux-androideabi- zImage -j6
  
-cp arch/arm/boot/zImage ~/anykernel-awifi-dev/
+cp arch/arm/boot/zImage ~/anykernel-AOSP/
  
-cd ~/anykernel-awifi-dev/
+cd ~/anykernel-AOSP/
  
-zipfile="RedKernel-rXXX-awifi-dev.zip"
+zipfile="RedKernel-rXXX-AOSP"
 echo "making zip file"
 cp zImage zip/kernel/
  
