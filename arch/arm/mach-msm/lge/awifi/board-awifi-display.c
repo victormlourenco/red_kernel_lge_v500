@@ -1725,9 +1725,9 @@ static struct backlight_platform_data lm3532_data = {
 };
 #elif defined(CONFIG_BACKLIGHT_I2C_BL)
 static char i2c_bl_mapped_lm3532_value[256] = {
-	88,91,91,91,94,94,94,97,97,97,100,100,100,103,103,
-	103,106,106,106,109,109,109,113,113,113,116,116,119,119,119,
-	122,122,122,125,125,125,128,128,128,131,131,131,135,135,138,
+	119,119,119,119,119,119,119,119,124,124,124,124,124,124,124,
+	124,124,124,124,124,124,124,128,128,128,128,128,128,128,128,
+	128,128,128,128,128,131,131,131,131,131,131,131,135,135,138,
 	138,141,141,143,143,146,146,148,148,151,151,151,153,153,153,
 	153,155,155,155,155,157,157,159,159,159,161,161,162,162,162,
 	164,164,165,165,166,166,168,168,168,170,170,171,171,172,172,
@@ -1750,9 +1750,9 @@ static struct i2c_bl_cmd i2c_bl_init_lm3532_cmd[] = {
 	{0x1d, 0x01, 0xff, "Enable LED A"},
 #if defined(CONFIG_LGE_BACKLIGHT_CABC)
 	{0x13, 0x06, 0xff, "Active PWM input is enabled in Zone 0, active high polarity, PWM2 is mapped to Control Bank A"},
-	{0x16, 0x01, 0xff, "Control A Zone Target 0, Linear Mapping, I2C Current Control"},
+	{0x16, 0x01, 0xff, "Control A Zone Target 0, Exponential Mapping, I2C Current Control"},
 #else
-	{0x16, 0x01, 0xff, "Control A Zone Target 0, Linear Mapping, I2C Current Control"},
+	{0x16, 0x01, 0xff, "Control A Zone Target 0, Exponential Mapping, I2C Current Control"},
 #endif // CABC apply
 	{0x17, 0x13, 0xff, "Full-Scale Current (20.2mA) of BANK A"},
 };
