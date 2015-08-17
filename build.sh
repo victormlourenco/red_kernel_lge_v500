@@ -6,7 +6,7 @@ make ARCH=arm CROSS_COMPILE=/home/victor/UBERTC/out/arm-linux-androideabi-4.9-co
  
 cp arch/arm/boot/zImage ~/anykernel_awifi/
  
-cd ~/anykernel-awifi/
+cd ~/anykernel_awifi/
  
 zipfile="RedKernel-rXXX-awifi-dev.zip"
 echo "making zip file"
